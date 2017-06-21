@@ -5398,6 +5398,7 @@ OPJ_BOOL opj_j2k_read_mcc (     opj_j2k_t *p_j2k,
         OPJ_UINT32 l_nb_collections;
         OPJ_UINT32 l_nb_comps;
         OPJ_UINT32 l_nb_bytes_by_comp;
+        OPJ_BOOL l_new_mcc = OPJ_FALSE;
 
         /* preconditions */
         assert(p_header_data != 00);
@@ -5459,6 +5460,7 @@ OPJ_BOOL opj_j2k_read_mcc (     opj_j2k_t *p_j2k,
                         memset(l_mcc_record,0,(l_tcp->m_nb_max_mcc_records-l_tcp->m_nb_mcc_records) * sizeof(opj_simple_mcc_decorrelation_data_t));
                 }
                 l_mcc_record = l_tcp->m_mcc_records + l_tcp->m_nb_mcc_records;
+                l_new_mcc = OPJ_TRUE;
         }
         l_mcc_record->m_index = l_indix;
 
@@ -5594,7 +5596,9 @@ OPJ_BOOL opj_j2k_read_mcc (     opj_j2k_t *p_j2k,
                 return OPJ_FALSE;
         }
 
-        ++l_tcp->m_nb_mcc_records;
+        if (l_new_mcc) {
+                ++l_tcp->m_nb_mcc_records;
+        }
 
         return OPJ_TRUE;
 }
@@ -5616,8 +5620,6 @@ OPJ_BOOL opj_j2k_write_mco(     opj_j2k_t *p_j2k,
         assert(p_stream != 00);
 
         l_tcp =&(p_j2k->m_cp.tcps[p_j2k->m_current_tile_number]);
-        l_current_data = p_j2k->m_specific_param.m_encoder.m_header_tile_data;
-
         l_mco_size = 5 + l_tcp->m_nb_mcc_records;
         if (l_mco_size > p_j2k->m_specific_param.m_encoder.m_header_tile_data_size) {
 
@@ -5632,6 +5634,8 @@ OPJ_BOOL opj_j2k_write_mco(     opj_j2k_t *p_j2k,
                 p_j2k->m_specific_param.m_encoder.m_header_tile_data = new_header_tile_data;
                 p_j2k->m_specific_param.m_encoder.m_header_tile_data_size = l_mco_size;
         }
+        l_current_data = p_j2k->m_specific_param.m_encoder.m_header_tile_data;
+
 
         opj_write_bytes(l_current_data,J2K_MS_MCO,2);                   /* MCO */
         l_current_data += 2;
@@ -5643,10 +5647,9 @@ OPJ_BOOL opj_j2k_write_mco(     opj_j2k_t *p_j2k,
         ++l_current_data;
 
         l_mcc_record = l_tcp->m_mcc_records;
-        for     (i=0;i<l_tcp->m_nb_mcc_records;++i) {
+        for (i=0;i<l_tcp->m_nb_mcc_records;++i) {
                 opj_write_bytes(l_current_data,l_mcc_record->m_index,1);/* Imco -> use the mcc indicated by 1*/
                 ++l_current_data;
-
                 ++l_mcc_record;
         }
 
