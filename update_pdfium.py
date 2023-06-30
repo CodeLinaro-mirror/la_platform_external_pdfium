@@ -15,29 +15,28 @@ CHROMIUM_DEPS_FILE = "DEPS"
 PDFIUM_GIT_REPO = "https://pdfium.googlesource.com/pdfium.git"
 
 MAKE_FILES = ["Android.bp",
-              "third_party/pdfiumopenjpeg.bp",
-              "third_party/pdfiumlcms.bp",
-              "third_party/pdfiumjpeg.bp",
-              "third_party/pdfiumagg23.bp",
-              "third_party/pdfiumzlib.bp",
-              "third_party/pdfiumbigint.bp",
-              "third_party/Android.bp",
-              "pdfiumfpdftext.bp",
-              "pdfiumfpdfdoc.bp",
-              "pdfiumfdrm.bp",
-              "pdfiumfxcodec.bp",
-              "pdfiumfpdfapi.bp",
-              "pdfiumfxcrt.bp",
-              "pdfiumfxge.bp",
-              "pdfiumjavascript.bp",
-              "pdfiumformfiller.bp",
-              "pdfiumfxedit.bp",
-              "pdfiumpdfwindow.bp",
-              "pdfium.bp"]
+              "constants/Android.bp",
+              "core/fdrm/Android.bp",
+              "core/fpdfapi/cmaps/Android.bp",
+              "core/fpdfapi/edit/Android.bp",
+              "core/fpdfapi/font/Android.bp",
+              "core/fpdfapi/page/Android.bp",
+              "core/fpdfapi/parser/Android.bp",
+              "core/fpdfapi/render/Android.bp",
+              "core/fpdfdoc/Android.bp",
+              "core/fpdftext/Android.bp",
+              "core/fxcodec/Android.bp",
+              "core/fxcrt/Android.bp",
+              "core/fxge/Android.bp",
+              "fpdfsdk/Android.bp",
+              "fpdfsdk/formfiller/Android.bp",
+              "fpdfsdk/pwl/Android.bp",
+              "fxjs/Android.bp",
+              "third_party/Android.bp"]
 
 OWNERS_FILES = ["OWNERS", "docs/OWNERS", "third_party/base/numerics/OWNERS"]
 
-COPY_FILES = [os.path.basename(__file__), ".git", "MODULE_LICENSE_BSD", "NOTICE"] + MAKE_FILES
+COPY_FILES = [os.path.basename(__file__), ".git", "MODULE_LICENSE_BSD"] + MAKE_FILES
 REMOVE_FILES = [os.path.basename(__file__), ".git", ".gitignore"] + OWNERS_FILES
 
 def getStableChromiumVersion():
