@@ -133,7 +133,7 @@ ScopedFPDFBitmap SkImageToPdfiumBitmap(const SkImage& image) {
 ScopedFPDFBitmap SkPictureToPdfiumBitmap(sk_sp<SkPicture> picture,
                                          const SkISize& size) {
   sk_sp<SkSurface> surface =
-      SkSurface::MakeRasterN32Premul(size.width(), size.height());
+      SkSurfaces::Raster(SkImageInfo::MakeN32Premul(size));
   if (!surface) {
     ADD_FAILURE() << "Could not create SkSurface";
     return nullptr;
@@ -232,14 +232,17 @@ class FPDFViewEmbedderTest : public EmbedderTest {
     int width = static_cast<int>(FPDF_GetPageWidth(page));
     int height = static_cast<int>(FPDF_GetPageHeight(page));
 
-    FPDF_RECORDER opaque_recorder = FPDF_RenderPageSkp(page, width, height);
-    ASSERT_TRUE(opaque_recorder);
+    sk_sp<SkPicture> picture;
+    {
+      auto recorder = std::make_unique<SkPictureRecorder>();
+      recorder->beginRecording(width, height);
 
-    SkPictureRecorder* recorder =
-        reinterpret_cast<SkPictureRecorder*>(opaque_recorder);
-    sk_sp<SkPicture> picture = recorder->finishRecordingAsPicture();
-    delete recorder;
-    ASSERT_TRUE(picture);
+      FPDF_RenderPageSkia(
+          reinterpret_cast<FPDF_SKIA_CANVAS>(recorder->getRecordingCanvas()),
+          page, width, height);
+      picture = recorder->finishRecordingAsPicture();
+      ASSERT_TRUE(picture);
+    }
 
     ScopedFPDFBitmap bitmap = SkPictureToPdfiumBitmap(
         std::move(picture), SkISize::Make(width, height));
@@ -1454,11 +1457,14 @@ TEST_F(FPDFViewEmbedderTest, RenderBug664284WithNoNativeText) {
   // macOS rendering result doesn't.
 
   const char* original_checksum = []() {
+    if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer()) {
+      return "29cb8045c21cfa2c920fdf43de70efd8";
+    }
 #if BUILDFLAG(IS_APPLE)
-    if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
-      return "0e339d606aafb63077f49e238dc27cb0";
-#endif
+    return "0e339d606aafb63077f49e238dc27cb0";
+#else
     return "288502887ffc63291f35a0573b944375";
+#endif
   }();
   static const char kNoNativeTextChecksum[] =
       "288502887ffc63291f35a0573b944375";
@@ -1470,6 +1476,27 @@ TEST_F(FPDFViewEmbedderTest, RenderBug664284WithNoNativeText) {
   TestRenderPageBitmapWithFlags(page, FPDF_NO_NATIVETEXT,
                                 kNoNativeTextChecksum);
 
+  UnloadPage(page);
+}
+
+TEST_F(FPDFViewEmbedderTest, RenderAnnotationWithPrintingFlag) {
+  const char* annotation_checksum = []() {
+    if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer()) {
+      return "eaece6b8041c0cb9b33398e5b6d5ddda";
+    }
+    return "c108ba6e0a9743652f12e4bc223f9b32";
+  }();
+  static const char kPrintingChecksum[] = "3e235b9f88f652f2b97b1fc393924849";
+  ASSERT_TRUE(OpenDocument("bug_1658.pdf"));
+  FPDF_PAGE page = LoadPage(0);
+  ASSERT_TRUE(page);
+
+  // A yellow highlight is rendered with `FPDF_ANNOT` flag.
+  TestRenderPageBitmapWithFlags(page, FPDF_ANNOT, annotation_checksum);
+
+  // After adding `FPDF_PRINTING` flag, the yellow highlight is not rendered.
+  TestRenderPageBitmapWithFlags(page, FPDF_PRINTING | FPDF_ANNOT,
+                                kPrintingChecksum);
   UnloadPage(page);
 }
 
@@ -1628,7 +1655,7 @@ TEST_F(FPDFViewEmbedderTest, RenderHelloWorldWithFlags) {
 
   const char* lcd_text_checksum = []() {
     if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
-      return "c1c548442e0e0f949c5550d89bf8ae3b";
+      return "d1decde2de1c07b5274cc8cb44f92427";
 #if BUILDFLAG(IS_APPLE)
     return "6eef7237f7591f07616e238422086737";
 #else
@@ -1636,11 +1663,14 @@ TEST_F(FPDFViewEmbedderTest, RenderHelloWorldWithFlags) {
 #endif  // BUILDFLAG(IS_APPLE)
   }();
   const char* no_smoothtext_checksum = []() {
+    if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer()) {
+      return "cd5bbe9407c3fcc85d365172a9a55abd";
+    }
 #if BUILDFLAG(IS_APPLE)
-    if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
-      return "6eef7237f7591f07616e238422086737";
-#endif
+    return "6eef7237f7591f07616e238422086737";
+#else
     return "37d0b34e1762fdda4c05ce7ea357b828";
+#endif
   }();
 
   TestRenderPageBitmapWithFlags(page, FPDF_LCD_TEXT, lcd_text_checksum);
@@ -2038,7 +2068,15 @@ TEST_F(FPDFViewEmbedderTest, NoSmoothTextItalicOverlappingGlyphs) {
   FPDF_PAGE page = LoadPage(0);
   ASSERT_TRUE(page);
 
-  TestRenderPageBitmapWithFlags(page, FPDF_RENDER_NO_SMOOTHTEXT,
-                                "4ef1f65ab1ac76acb97a3540dcb10b4e");
+  const char* checksum = []() {
+#if !BUILDFLAG(IS_APPLE)
+    if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer()) {
+      return "ceeb93d2bcdb586d62c95b33cadcd873";
+    }
+#endif
+    return "4ef1f65ab1ac76acb97a3540dcb10b4e";
+  }();
+
+  TestRenderPageBitmapWithFlags(page, FPDF_RENDER_NO_SMOOTHTEXT, checksum);
   UnloadPage(page);
 }

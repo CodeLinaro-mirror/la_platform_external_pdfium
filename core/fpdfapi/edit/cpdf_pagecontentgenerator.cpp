@@ -41,9 +41,9 @@
 #include "core/fpdfapi/parser/object_tree_traversal_util.h"
 #include "third_party/base/check.h"
 #include "third_party/base/containers/contains.h"
+#include "third_party/base/containers/span.h"
 #include "third_party/base/notreached.h"
 #include "third_party/base/numerics/safe_conversions.h"
-#include "third_party/base/span.h"
 
 namespace {
 
@@ -81,10 +81,9 @@ void RecordPageObjectResourceUsage(const CPDF_PageObject* page_object,
         break;
     }
   }
-  const ByteString& graphics_resource_name =
-      page_object->GetGraphicsResourceName();
-  if (!graphics_resource_name.IsEmpty()) {
-    seen_resources["ExtGState"].insert(graphics_resource_name);
+  for (const auto& name : page_object->GetGraphicsResourceNames()) {
+    CHECK(!name.IsEmpty());
+    seen_resources["ExtGState"].insert(name);
   }
 }
 
@@ -362,9 +361,8 @@ const CPDF_ContentMarks* CPDF_PageContentGenerator::ProcessContentMarks(
         *buf << "/" << item->GetPropertyName() << " ";
         break;
       }
-      default:
-        NOTREACHED();
-        break;
+      case CPDF_ContentMarkItem::kNone:
+        NOTREACHED_NORETURN();
     }
 
     // Write BDC (begin dictionary content) operator.
@@ -548,6 +546,18 @@ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
   CFX_GraphStateData::LineJoin lineJoin = pPageObj->m_GraphState.GetLineJoin();
   if (lineJoin != CFX_GraphStateData::LineJoin::kMiter)
     *buf << static_cast<int>(lineJoin) << " j ";
+  std::vector<float> dash_array = pPageObj->m_GraphState.GetLineDashArray();
+  if (dash_array.size()) {
+    *buf << "[";
+    for (size_t i = 0; i < dash_array.size(); ++i) {
+      if (i > 0) {
+        *buf << " ";
+      }
+      WriteFloat(*buf, dash_array[i]);
+    }
+    *buf << "] ";
+    WriteFloat(*buf, pPageObj->m_GraphState.GetLineDashPhase()) << " d ";
+  }
 
   const CPDF_ClipPath& clip_path = pPageObj->m_ClipPath;
   if (clip_path.HasRef()) {
@@ -562,8 +572,7 @@ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
           *buf << " W* ";
           break;
         case CFX_FillRenderOptions::FillType::kNoFill:
-          NOTREACHED();
-          break;
+          NOTREACHED_NORETURN();
       }
 
       // Use a no-op path-painting operator to terminate the path without
@@ -600,7 +609,7 @@ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
     }
     m_pDocument->AddIndirectObject(gsDict);
     name = RealizeResource(std::move(gsDict), "ExtGState");
-    pPageObj->SetGraphicsResourceName(name);
+    pPageObj->SetGraphicsResourceNames({name});
     m_pObjHolder->GraphicsMapInsert(graphD, name);
   }
   *buf << "/" << PDF_NameEncode(name) << " gs ";

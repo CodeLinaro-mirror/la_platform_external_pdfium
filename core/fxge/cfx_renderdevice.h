@@ -18,7 +18,7 @@
 #include "core/fxge/dib/fx_dib.h"
 #include "core/fxge/render_defines.h"
 #include "core/fxge/renderdevicedriver_iface.h"
-#include "third_party/base/span.h"
+#include "third_party/base/containers/span.h"
 
 class CFX_DIBBase;
 class CFX_DIBitmap;
@@ -215,12 +215,12 @@ class CFX_RenderDevice {
   bool MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask);
 
 #if defined(_SKIA_SUPPORT_)
-  virtual bool SetBitsWithMask(const RetainPtr<CFX_DIBBase>& pBitmap,
-                               const RetainPtr<CFX_DIBBase>& pMask,
-                               int left,
-                               int top,
-                               int bitmap_alpha,
-                               BlendMode blend_type);
+  bool SetBitsWithMask(const RetainPtr<CFX_DIBBase>& pBitmap,
+                       const RetainPtr<CFX_DIBBase>& pMask,
+                       int left,
+                       int top,
+                       int bitmap_alpha,
+                       BlendMode blend_type);
 #endif
 
  protected:

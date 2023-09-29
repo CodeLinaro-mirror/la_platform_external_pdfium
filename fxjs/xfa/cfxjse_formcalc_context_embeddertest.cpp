@@ -11,7 +11,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/scoped_set_tz.h"
 #include "testing/xfa_js_embedder_test.h"
-#include "third_party/base/cxx17_backports.h"
 #include "xfa/fxfa/cxfa_eventparam.h"
 
 class CFXJSE_FormCalcContextEmbedderTest : public XFAJSEmbedderTest {
@@ -717,13 +716,9 @@ TEST_F(CFXJSE_FormCalcContextEmbedderTest, Encode) {
   ExecuteExpectString("Encode(\"\\u0022\\u00f5\\ufed0\", \"html\")",
                       "&quot;&otilde;&#xfed0;");
 
-#if !BUILDFLAG(IS_WIN)
-  // Windows wchar_t isn't wide enough to handle these anyways.
-  // TODO(tsepez): fix surrogate encodings.
   ExecuteExpectString("Encode(\"\\uD83D\\uDCA9\", \"url\")", "%01%f4%a9");
   ExecuteExpectString("Encode(\"\\uD83D\\uDCA9\", \"xml\")", "");
   ExecuteExpectString("Encode(\"\\uD83D\\uDCA9\", \"html\")", "");
-#endif  // !BUILDFLAG(IS_WIN)
 }
 
 TEST_F(CFXJSE_FormCalcContextEmbedderTest, DISABLED_Format) {

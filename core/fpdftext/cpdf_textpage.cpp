@@ -30,7 +30,6 @@
 #include "core/fxcrt/stl_util.h"
 #include "third_party/base/check.h"
 #include "third_party/base/check_op.h"
-#include "third_party/base/cxx17_backports.h"
 
 namespace {
 
@@ -544,7 +543,7 @@ bool CPDF_TextPage::GetRect(int rectIndex, CFX_FloatRect* pRect) const {
 
 CPDF_TextPage::TextOrientation CPDF_TextPage::FindTextlineFlowOrientation()
     const {
-  DCHECK_NE(m_pPage->GetPageObjectCount(), 0);
+  DCHECK_NE(m_pPage->GetPageObjectCount(), 0u);
 
   const int32_t nPageWidth = static_cast<int32_t>(m_pPage->GetPageWidth());
   const int32_t nPageHeight = static_cast<int32_t>(m_pPage->GetPageHeight());
@@ -563,13 +562,13 @@ CPDF_TextPage::TextOrientation CPDF_TextPage::FindTextlineFlowOrientation()
       continue;
 
     int32_t minH = static_cast<int32_t>(
-        pdfium::clamp<float>(pPageObj->GetRect().left, 0.0f, nPageWidth));
+        std::clamp<float>(pPageObj->GetRect().left, 0.0f, nPageWidth));
     int32_t maxH = static_cast<int32_t>(
-        pdfium::clamp<float>(pPageObj->GetRect().right, 0.0f, nPageWidth));
+        std::clamp<float>(pPageObj->GetRect().right, 0.0f, nPageWidth));
     int32_t minV = static_cast<int32_t>(
-        pdfium::clamp<float>(pPageObj->GetRect().bottom, 0.0f, nPageHeight));
+        std::clamp<float>(pPageObj->GetRect().bottom, 0.0f, nPageHeight));
     int32_t maxV = static_cast<int32_t>(
-        pdfium::clamp<float>(pPageObj->GetRect().top, 0.0f, nPageHeight));
+        std::clamp<float>(pPageObj->GetRect().top, 0.0f, nPageHeight));
     if (minH >= maxH || minV >= maxV)
       continue;
 
