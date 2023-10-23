@@ -33,7 +33,7 @@
 #include "core/fxge/text_glyph_pos.h"
 #include "third_party/base/check.h"
 #include "third_party/base/check_op.h"
-#include "third_party/base/span.h"
+#include "third_party/base/containers/span.h"
 
 #if defined(_SKIA_SUPPORT_)
 #include "third_party/skia/include/core/SkTypes.h"  // nogncheck
@@ -426,7 +426,7 @@ bool GetZeroAreaPath(pdfium::span<const CFX_Path::Point> points,
   for (size_t i = 0; i < points.size(); i++) {
     CFX_Path::Point::Type point_type = points[i].m_Type;
     if (point_type == CFX_Path::Point::Type::kMove) {
-      DCHECK_EQ(0, i);
+      DCHECK_EQ(0u, i);
       continue;
     }
 
@@ -1186,14 +1186,6 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
                          end_col, normalize, x_subpixel, a, r, g, b);
   }
 
-#if defined(_SKIA_SUPPORT_)
-  if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer()) {
-    // DrawNormalTextHelper() can result in unpremultiplied bitmaps for
-    // rendering glyphs. Make sure `bitmap` is premultiplied before proceeding.
-    bitmap->PreMultiply();
-  }
-#endif
-
   if (bitmap->IsMaskFormat())
     SetBitMask(bitmap, bmp_rect.left, bmp_rect.top, fill_color);
   else
@@ -1349,7 +1341,6 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
   const float fHalfWidth = fWidth / 2.0f;
 
   switch (nStyle) {
-    default:
     case BorderStyle::kSolid: {
       CFX_Path path;
       path.AppendRect(fLeft, fBottom, fRight, fTop);
