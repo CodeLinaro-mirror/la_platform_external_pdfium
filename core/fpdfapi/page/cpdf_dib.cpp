@@ -39,8 +39,6 @@
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "third_party/base/check.h"
 #include "third_party/base/check_op.h"
-#include "third_party/base/cxx17_backports.h"
-#include "third_party/base/notreached.h"
 
 namespace {
 
@@ -51,7 +49,7 @@ bool IsValidDimension(int value) {
 
 unsigned int GetBits8(const uint8_t* pData, uint64_t bitpos, size_t nbits) {
   DCHECK(nbits == 1 || nbits == 2 || nbits == 4 || nbits == 8 || nbits == 16);
-  DCHECK_EQ((bitpos & (nbits - 1)), 0);
+  DCHECK_EQ((bitpos & (nbits - 1)), 0u);
   unsigned int byte = pData[bitpos / 8];
   if (nbits == 8)
     return byte;
@@ -180,9 +178,6 @@ JpxDecodeAction GetJpxDecodeActionFromImageColorSpace(
 
     case OPJ_CLRSPC_CMYK:
       return JpxDecodeAction::kUseCmyk;
-
-    default:
-      NOTREACHED_NORETURN();
   }
 }
 
@@ -356,7 +351,8 @@ CPDF_DIB::LoadState CPDF_DIB::ContinueLoadDIBBase(PauseIndicatorIface* pPause) {
     iDecodeStatus = Jbig2Decoder::StartDecode(
         m_pJbig2Context.get(), m_pDocument->GetOrCreateCodecContext(), m_Width,
         m_Height, pSrcSpan, nSrcKey, pGlobalSpan, nGlobalKey,
-        m_pCachedBitmap->GetBuffer(), m_pCachedBitmap->GetPitch(), pPause);
+        m_pCachedBitmap->GetWritableBuffer(), m_pCachedBitmap->GetPitch(),
+        pPause);
   } else {
     iDecodeStatus = Jbig2Decoder::ContinueDecode(m_pJbig2Context.get(), pPause);
   }
@@ -690,9 +686,9 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
   // If |original_colorspace| exists, then LoadColorInfo() already set
   // |m_nComponents|.
   if (original_colorspace) {
-    DCHECK_NE(0, m_nComponents);
+    DCHECK_NE(0u, m_nComponents);
   } else {
-    DCHECK_EQ(0, m_nComponents);
+    DCHECK_EQ(0u, m_nComponents);
     m_nComponents = GetComponentCountFromOpjColorSpace(image_info.colorspace);
     if (m_nComponents == 0) {
       return nullptr;
@@ -719,13 +715,13 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
     return nullptr;
 
   result_bitmap->Clear(0xFFFFFFFF);
-  if (!decoder->Decode(result_bitmap->GetBuffer(), result_bitmap->GetPitch(),
-                       swap_rgb, m_nComponents)) {
+  if (!decoder->Decode(result_bitmap->GetWritableBuffer(),
+                       result_bitmap->GetPitch(), swap_rgb, m_nComponents)) {
     return nullptr;
   }
 
   if (convert_argb_to_rgb) {
-    DCHECK_EQ(3, m_nComponents);
+    DCHECK_EQ(3u, m_nComponents);
     auto rgb_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
     if (!rgb_bitmap->Create(image_info.width, image_info.height,
                             FXDIB_Format::kRgb)) {
@@ -1061,9 +1057,9 @@ void CPDF_DIB::TranslateScanline24bpp(
     } else if (m_Family != CPDF_ColorSpace::Family::kPattern) {
       m_pColorSpace->GetRGB(color_values, &R, &G, &B);
     }
-    R = pdfium::clamp(R, 0.0f, 1.0f);
-    G = pdfium::clamp(G, 0.0f, 1.0f);
-    B = pdfium::clamp(B, 0.0f, 1.0f);
+    R = std::clamp(R, 0.0f, 1.0f);
+    G = std::clamp(G, 0.0f, 1.0f);
+    B = std::clamp(B, 0.0f, 1.0f);
     dest_scan[dest_byte_pos] = static_cast<uint8_t>(B * 255);
     dest_scan[dest_byte_pos + 1] = static_cast<uint8_t>(G * 255);
     dest_scan[dest_byte_pos + 2] = static_cast<uint8_t>(R * 255);
@@ -1135,9 +1131,9 @@ bool CPDF_DIB::TranslateScanline24bppDefaultDecode(
   return true;
 }
 
-pdfium::span<uint8_t> CPDF_DIB::GetBuffer() const {
+pdfium::span<const uint8_t> CPDF_DIB::GetBuffer() const {
   return m_pCachedBitmap ? m_pCachedBitmap->GetBuffer()
-                         : pdfium::span<uint8_t>();
+                         : pdfium::span<const uint8_t>();
 }
 
 pdfium::span<const uint8_t> CPDF_DIB::GetScanline(int line) const {

@@ -19,7 +19,6 @@
 #include "core/fxge/cfx_unicodeencoding.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "third_party/base/check.h"
-#include "third_party/base/notreached.h"
 #include "xfa/fgas/graphics/cfgas_gecolor.h"
 #include "xfa/fgas/graphics/cfgas_gepath.h"
 #include "xfa/fgas/graphics/cfgas_gepattern.h"
@@ -129,10 +128,7 @@ void CFGAS_GEGraphics::SaveGraphState() {
 
 void CFGAS_GEGraphics::RestoreGraphState() {
   m_renderDevice->RestoreState(false);
-  if (m_infoStack.empty()) {
-    NOTREACHED();
-    return;
-  }
+  CHECK(!m_infoStack.empty());
   m_info = *m_infoStack.back();
   m_infoStack.pop_back();
   return;
@@ -261,7 +257,7 @@ void CFGAS_GEGraphics::FillPathWithPattern(
   auto mask = pdfium::MakeRetain<CFX_DIBitmap>();
   mask->Create(data.width, data.height, FXDIB_Format::k1bppMask);
   fxcrt::spancpy(
-      mask->GetBuffer(),
+      mask->GetWritableBuffer(),
       pdfium::make_span(data.maskBits).first(mask->GetPitch() * data.height));
   const CFX_FloatRect rectf =
       matrix.TransformRect(path.GetPath().GetBoundingBox());
@@ -388,10 +384,6 @@ void CFGAS_GEGraphics::FillPathWithShading(
         }
       }
       result = true;
-      break;
-    }
-    default: {
-      result = false;
       break;
     }
   }

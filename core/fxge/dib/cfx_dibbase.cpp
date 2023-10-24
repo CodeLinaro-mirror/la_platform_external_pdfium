@@ -26,8 +26,8 @@
 #include "core/fxge/dib/cfx_imagetransformer.h"
 #include "third_party/base/check.h"
 #include "third_party/base/check_op.h"
+#include "third_party/base/containers/span.h"
 #include "third_party/base/notreached.h"
-#include "third_party/base/span.h"
 
 namespace {
 
@@ -620,8 +620,8 @@ CFX_DIBBase::CFX_DIBBase() = default;
 
 CFX_DIBBase::~CFX_DIBBase() = default;
 
-pdfium::span<uint8_t> CFX_DIBBase::GetBuffer() const {
-  return pdfium::span<uint8_t>();
+pdfium::span<const uint8_t> CFX_DIBBase::GetBuffer() const {
+  return pdfium::span<const uint8_t>();
 }
 
 bool CFX_DIBBase::SkipToScanline(int line, PauseIndicatorIface* pPause) const {
@@ -956,8 +956,9 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ConvertTo(FXDIB_Format dest_format) const {
 
   RetainPtr<const CFX_DIBBase> holder(this);
   DataVector<uint32_t> pal_8bpp;
-  if (!ConvertBuffer(dest_format, pClone->GetBuffer(), pClone->GetPitch(),
-                     m_Width, m_Height, holder, 0, 0, &pal_8bpp)) {
+  if (!ConvertBuffer(dest_format, pClone->GetWritableBuffer(),
+                     pClone->GetPitch(), m_Width, m_Height, holder, 0, 0,
+                     &pal_8bpp)) {
     return nullptr;
   }
   if (!pal_8bpp.empty())
@@ -979,8 +980,8 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
 
   pTransBitmap->SetPalette(GetPaletteSpan());
   const int dest_pitch = pTransBitmap->GetPitch();
-  pdfium::span<uint8_t> dest_span =
-      pTransBitmap->GetBuffer().first(Fx2DSizeOrDie(dest_pitch, result_height));
+  pdfium::span<uint8_t> dest_span = pTransBitmap->GetWritableBuffer().first(
+      Fx2DSizeOrDie(dest_pitch, result_height));
   const size_t dest_last_row_offset =
       Fx2DSizeOrDie(dest_pitch, result_height - 1);
   const int row_start = bXFlip ? m_Height - dest_clip.right : dest_clip.left;
@@ -1128,7 +1129,6 @@ bool CFX_DIBBase::ConvertBuffer(FXDIB_Format dest_format,
                                 height, pSrcBitmap, src_left, src_top);
     }
     default:
-      NOTREACHED();
-      return false;
+      NOTREACHED_NORETURN();
   }
 }
