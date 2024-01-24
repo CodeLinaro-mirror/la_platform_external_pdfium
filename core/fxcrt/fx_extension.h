@@ -29,19 +29,23 @@ wchar_t* FXSYS_wcsncpy(wchar_t* dstStr, const wchar_t* srcStr, size_t count);
 int32_t FXSYS_wcsnicmp(const wchar_t* s1, const wchar_t* s2, size_t count);
 
 inline bool FXSYS_iswlower(int32_t c) {
-  return u_islower(c);
+  if (__builtin_available(android 31, *)) return u_islower(c);
+  else return iswlower(c);
 }
 
 inline bool FXSYS_iswupper(int32_t c) {
-  return u_isupper(c);
+  if (__builtin_available(android 31, *)) return u_isupper(c);
+  else return iswupper(c);
 }
 
 inline int32_t FXSYS_towlower(wchar_t c) {
-  return u_tolower(c);
+  if (__builtin_available(android 31, *)) return u_tolower(c);
+  else return towlower(c);
 }
 
 inline int32_t FXSYS_towupper(wchar_t c) {
-  return u_toupper(c);
+  if (__builtin_available(android 31, *)) return u_toupper(c);
+  else return towupper(c);
 }
 
 inline bool FXSYS_IsLowerASCII(int32_t c) {
@@ -57,15 +61,18 @@ inline char FXSYS_ToUpperASCII(char c) {
 }
 
 inline bool FXSYS_iswalpha(wchar_t c) {
-  return u_isalpha(c);
+  if (__builtin_available(android 31, *)) return u_isalpha(c);
+  else return iswalpha(c);
 }
 
 inline bool FXSYS_iswalnum(wchar_t c) {
-  return u_isalnum(c);
+  if (__builtin_available(android 31, *)) return u_isalnum(c);
+  else return iswalnum(c);
 }
 
 inline bool FXSYS_iswspace(wchar_t c) {
-  return u_isspace(c);
+  if (__builtin_available(android 31, *)) return u_isspace(c);
+  else return iswspace(c);
 }
 
 inline bool FXSYS_IsOctalDigit(char c) {
