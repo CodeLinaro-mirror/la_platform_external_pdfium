@@ -22,6 +22,8 @@
 
 #include <stddef.h>
 
+typedef __SIZE_TYPE__ size_t;
+
 #if defined(_WIN32) && !defined(__WINDOWS__)
 #include <windows.h>
 #endif
