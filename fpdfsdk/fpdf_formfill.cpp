@@ -176,58 +176,6 @@ CPDFSDK_PageView* FormHandleToPageView(FPDF_FORMHANDLE hHandle,
   return pFormFillEnv ? pFormFillEnv->GetOrCreatePageView(pPage) : nullptr;
 }
 
-void FFLCommon(FPDF_FORMHANDLE hHandle,
-               FPDF_BITMAP bitmap,
-               FPDF_SKIA_CANVAS canvas,
-               FPDF_PAGE fpdf_page,
-               int start_x,
-               int start_y,
-               int size_x,
-               int size_y,
-               int rotate,
-               int flags) {
-  if (!hHandle)
-    return;
-
-  IPDF_Page* pPage = IPDFPageFromFPDFPage(fpdf_page);
-  if (!pPage)
-    return;
-
-  CPDF_Document* pPDFDoc = pPage->GetDocument();
-  CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, fpdf_page);
-
-  const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
-  CFX_Matrix matrix = pPage->GetDisplayMatrix(rect, rotate);
-
-  auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
-#if defined(_SKIA_SUPPORT_)
-  if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
-    pDevice->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
-  }
-#endif
-
-  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
-  pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
-  {
-    CFX_RenderDevice::StateRestorer restorer(pDevice.get());
-    pDevice->SetClip_Rect(rect);
-
-    CPDF_RenderOptions options;
-    options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
-
-    // Grayscale output
-    if (flags & FPDF_GRAYSCALE)
-      options.SetColorMode(CPDF_RenderOptions::kGray);
-
-    options.SetDrawAnnots(flags & FPDF_ANNOT);
-    options.SetOCContext(
-        pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
-
-    if (pPageView)
-      pPageView->PageView_OnDraw(pDevice.get(), matrix, &options, rect);
-  }
-}
-
 // Returns true if formfill version is correctly set. See |version| in
 // FPDF_FORMFILLINFO for details regarding correct version.
 bool CheckFormfillVersion(FPDF_FORMFILLINFO* formInfo) {
@@ -685,8 +633,101 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDraw(FPDF_FORMHANDLE hHandle,
                                             int size_y,
                                             int rotate,
                                             int flags) {
-  FFLCommon(hHandle, bitmap, nullptr, page, start_x, start_y, size_x, size_y,
-            rotate, flags);
+  if (!hHandle)
+  return;
+
+  IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
+  if (!pPage)
+  return;
+
+  CPDF_Document* pPDFDoc = pPage->GetDocument();
+  CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
+
+  const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
+  CFX_Matrix matrix = pPage->GetDisplayMatrix(rect, rotate);
+
+  auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
+  #if defined(_SKIA_SUPPORT_)
+  if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
+      pDevice->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
+  }
+  #endif
+
+  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
+  pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
+  {
+  CFX_RenderDevice::StateRestorer restorer(pDevice.get());
+  pDevice->SetClip_Rect(rect);
+
+  CPDF_RenderOptions options;
+  options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
+
+  // Grayscale output
+  if (flags & FPDF_GRAYSCALE)
+  options.SetColorMode(CPDF_RenderOptions::kGray);
+
+  options.SetDrawAnnots(flags & FPDF_ANNOT);
+  options.SetOCContext(
+          pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
+
+  if (pPageView)
+      pPageView->PageView_OnDraw(pDevice.get(), matrix, &options, rect);
+  }
+}
+
+FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawWithMatrix(FPDF_FORMHANDLE hHandle,
+                                            FPDF_BITMAP bitmap,
+                                            FPDF_PAGE page,
+                                            const FS_MATRIX* matrix,
+                                            const FS_RECTF* clipping,
+                                            int flags) {
+  if (!hHandle)
+  return;
+
+  IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
+  if (!pPage)
+  return;
+
+  CPDF_Document* pPDFDoc = pPage->GetDocument();
+  CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
+
+  CFX_FloatRect clipping_rect;
+  if (clipping)
+  clipping_rect = CFXFloatRectFromFSRectF(*clipping);
+  FX_RECT clip_rect = clipping_rect.ToFxRect();
+
+  const FX_RECT rect(0, 0, pPage->GetPageWidth(), pPage->GetPageHeight());
+  CFX_Matrix transform_matrix = pPage->GetDisplayMatrix(rect, 0);
+  if (matrix)
+      transform_matrix *= CFXMatrixFromFSMatrix(*matrix);
+
+  auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
+  #if defined(_SKIA_SUPPORT_)
+  if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
+      pDevice->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
+  }
+  #endif
+
+  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
+  pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
+  {
+  CFX_RenderDevice::StateRestorer restorer(pDevice.get());
+  pDevice->SetClip_Rect(clip_rect);
+
+  CPDF_RenderOptions options;
+  options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
+
+  // Grayscale output
+  if (flags & FPDF_GRAYSCALE)
+  options.SetColorMode(CPDF_RenderOptions::kGray);
+
+  options.SetDrawAnnots(flags & FPDF_ANNOT);
+  options.SetOCContext(
+          pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
+
+  if (pPageView)
+      pPageView->PageView_OnDraw(pDevice.get(), transform_matrix, &options, clip_rect);
+  }
 }
 
 #if defined(_SKIA_SUPPORT_)

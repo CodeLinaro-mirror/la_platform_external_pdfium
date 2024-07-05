@@ -1912,6 +1912,42 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDraw(FPDF_FORMHANDLE hHandle,
                                             int rotate,
                                             int flags);
 
+/*
+* Function: FPDF_FFLDrawWithMatrix
+*       Render FormFields and popup window on a page to a device independent
+*       bitmap.
+* Parameters:
+*       hHandle      -   Handle to the form fill module, as returned by
+*                        FPDFDOC_InitFormFillEnvironment().
+*       bitmap       -   Handle to the device independent bitmap (as the
+*                        output buffer). Bitmap handles can be created by
+*                        FPDFBitmap_Create().
+*       matrix       -   The transform matrix, which must be invertible.
+*                        See PDF Reference 1.7, 4.2.2 Common Transformations.
+*       clipping     -   The rect to clip to in device coords.
+*       flags        -   0 for normal display, or combination of flags
+*                        defined above.
+* Return Value:
+*       None.
+* Comments:
+*       This function is designed to render annotations that are
+*       user-interactive, which are widget annotations (for FormFields) and
+*       popup annotations.
+*       With the FPDF_ANNOT flag, this function will render a popup annotation
+*       when users mouse-hover on a non-widget annotation. Regardless of
+*       FPDF_ANNOT flag, this function will always render widget annotations
+*       for FormFields.
+*       In order to implement the FormFill functions, implementation should
+*       call this function after rendering functions, such as
+*       FPDF_RenderPageBitmapWithMatrix(), have finished rendering the page contents.
+*/
+FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawWithMatrix(FPDF_FORMHANDLE hHandle,
+                                            FPDF_BITMAP bitmap,
+                                            FPDF_PAGE page,
+                                            const FS_MATRIX* matrix,
+                                            const FS_RECTF* clipping,
+                                            int flags);
+
 #if defined(_SKIA_SUPPORT_)
 FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawSkia(FPDF_FORMHANDLE hHandle,
                                                 FPDF_SKIA_CANVAS canvas,
