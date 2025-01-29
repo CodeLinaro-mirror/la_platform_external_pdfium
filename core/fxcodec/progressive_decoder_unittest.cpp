@@ -14,22 +14,25 @@
 
 #include "core/fxcodec/fx_codec.h"
 #include "core/fxcodec/fx_codec_def.h"
+#include "core/fxcodec/jpeg/jpeg_progressive_decoder.h"
 #include "core/fxcrt/cfx_read_only_span_stream.h"
 #include "core/fxcrt/cfx_read_only_vector_stream.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/base/containers/span.h"
 
 #ifdef PDF_ENABLE_XFA_BMP
 #include "core/fxcodec/bmp/bmp_decoder.h"
+#include "core/fxcodec/bmp/bmp_progressive_decoder.h"
 #endif  // PDF_ENABLE_XFA_BMP
 
 #ifdef PDF_ENABLE_XFA_GIF
 #include "core/fxcodec/gif/gif_decoder.h"
+#include "core/fxcodec/gif/gif_progressive_decoder.h"
 #endif  // PDF_ENABLE_XFA_GIF
 
 namespace fxcodec {
@@ -47,18 +50,39 @@ constexpr std::array<uint8_t, Size> IotaArray(uint8_t start) {
 }
 
 FXCODEC_STATUS DecodeToBitmap(ProgressiveDecoder& decoder,
-                              const fxcrt::RetainPtr<CFX_DIBitmap>& bitmap) {
-  FXCODEC_STATUS status = decoder.StartDecode(bitmap, 0, 0, bitmap->GetWidth(),
-                                              bitmap->GetHeight());
-  while (status == FXCODEC_STATUS::kDecodeToBeContinued)
+                              RetainPtr<CFX_DIBitmap> bitmap) {
+  FXCODEC_STATUS status = decoder.StartDecode(std::move(bitmap));
+  while (status == FXCODEC_STATUS::kDecodeToBeContinued) {
     status = decoder.ContinueDecode();
+  }
   return status;
 }
+
+class ProgressiveDecoderTest : public testing::Test {
+  void SetUp() override {
+#ifdef PDF_ENABLE_XFA_BMP
+    BmpProgressiveDecoder::InitializeGlobals();
+#endif
+#ifdef PDF_ENABLE_XFA_GIF
+    GifProgressiveDecoder::InitializeGlobals();
+#endif
+    JpegProgressiveDecoder::InitializeGlobals();
+  }
+  void TearDown() override {
+    JpegProgressiveDecoder::DestroyGlobals();
+#ifdef PDF_ENABLE_XFA_GIF
+    GifProgressiveDecoder::DestroyGlobals();
+#endif
+#ifdef PDF_ENABLE_XFA_BMP
+    BmpProgressiveDecoder::DestroyGlobals();
+#endif
+  }
+};
 
 }  // namespace
 
 #ifdef PDF_ENABLE_XFA_BMP
-TEST(ProgressiveDecoder, Indexed8Bmp) {
+TEST_F(ProgressiveDecoderTest, Indexed8Bmp) {
   static constexpr uint8_t kInput[] = {
       0x42, 0x4d, 0x3e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3a,
       0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
@@ -77,9 +101,11 @@ TEST(ProgressiveDecoder, Indexed8Bmp) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgr, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -91,7 +117,7 @@ TEST(ProgressiveDecoder, Indexed8Bmp) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0x00));
 }
 
-TEST(ProgressiveDecoder, Indexed8BmpWithInvalidIndex) {
+TEST_F(ProgressiveDecoderTest, Indexed8BmpWithInvalidIndex) {
   static constexpr uint8_t kInput[] = {
       0x42, 0x4d, 0x3e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3a,
       0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
@@ -110,9 +136,11 @@ TEST(ProgressiveDecoder, Indexed8BmpWithInvalidIndex) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgr, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -123,7 +151,7 @@ TEST(ProgressiveDecoder, Indexed8BmpWithInvalidIndex) {
   EXPECT_EQ(FXCODEC_STATUS::kError, status);
 }
 
-TEST(ProgressiveDecoder, Direct24Bmp) {
+TEST_F(ProgressiveDecoderTest, Direct24Bmp) {
   static constexpr uint8_t kInput[] = {
       0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00,
       0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
@@ -141,9 +169,11 @@ TEST(ProgressiveDecoder, Direct24Bmp) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgr, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -155,7 +185,7 @@ TEST(ProgressiveDecoder, Direct24Bmp) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0x00));
 }
 
-TEST(ProgressiveDecoder, Direct32Bmp) {
+TEST_F(ProgressiveDecoderTest, Direct32Bmp) {
   static constexpr uint8_t kInput[] = {
       0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00,
       0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
@@ -173,9 +203,11 @@ TEST(ProgressiveDecoder, Direct32Bmp) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgrx, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -187,7 +219,7 @@ TEST(ProgressiveDecoder, Direct32Bmp) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0x00));
 }
 
-TEST(ProgressiveDecoder, BmpWithDataOffsetBeforeEndOfHeader) {
+TEST_F(ProgressiveDecoderTest, BmpWithDataOffsetBeforeEndOfHeader) {
   static constexpr uint8_t kInput[] = {
       0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x35, 0x00,
       0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
@@ -205,9 +237,11 @@ TEST(ProgressiveDecoder, BmpWithDataOffsetBeforeEndOfHeader) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgr, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -219,7 +253,7 @@ TEST(ProgressiveDecoder, BmpWithDataOffsetBeforeEndOfHeader) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0x00));
 }
 
-TEST(ProgressiveDecoder, BmpWithDataOffsetAfterEndOfHeader) {
+TEST_F(ProgressiveDecoderTest, BmpWithDataOffsetAfterEndOfHeader) {
   static constexpr uint8_t kInput[] = {
       0x42, 0x4d, 0x3b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x37, 0x00,
       0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
@@ -237,9 +271,11 @@ TEST(ProgressiveDecoder, BmpWithDataOffsetAfterEndOfHeader) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgr, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -251,7 +287,7 @@ TEST(ProgressiveDecoder, BmpWithDataOffsetAfterEndOfHeader) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0x00));
 }
 
-TEST(ProgressiveDecoder, LargeBmp) {
+TEST_F(ProgressiveDecoderTest, LargeBmp) {
   // Construct a 24-bit BMP larger than `kBlockSize` (4096 bytes).
   static constexpr uint8_t kWidth = 37;
   static constexpr uint8_t kHeight = 38;
@@ -276,9 +312,11 @@ TEST(ProgressiveDecoder, LargeBmp) {
 
   ASSERT_EQ(kWidth, decoder.GetWidth());
   ASSERT_EQ(kHeight, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgr, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kRgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -294,7 +332,7 @@ TEST(ProgressiveDecoder, LargeBmp) {
         bitmap->GetScanline(kHeight - row - 1);
 
     EXPECT_THAT(
-        scanline.subspan(0, kScanlineSize - 1),
+        scanline.first(kScanlineSize - 1),
         ElementsAreArray(IotaArray<kScanlineSize - 1>(row * kScanlineSize)));
 
     // Last byte is padding to a 32-bit boundary.
@@ -304,7 +342,7 @@ TEST(ProgressiveDecoder, LargeBmp) {
 #endif  // PDF_ENABLE_XFA_BMP
 
 #ifdef PDF_ENABLE_XFA_GIF
-TEST(ProgressiveDecoder, Gif87a) {
+TEST_F(ProgressiveDecoderTest, Gif87a) {
   static constexpr uint8_t kInput[] = {
       0x47, 0x49, 0x46, 0x38, 0x37, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x01,
       0x00, 0x40, 0x80, 0xc0, 0x80, 0x80, 0x80, 0x2c, 0x00, 0x00, 0x00, 0x00,
@@ -320,9 +358,11 @@ TEST(ProgressiveDecoder, Gif87a) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgra, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kArgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -334,7 +374,7 @@ TEST(ProgressiveDecoder, Gif87a) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0xff));
 }
 
-TEST(ProgressiveDecoder, Gif89a) {
+TEST_F(ProgressiveDecoderTest, Gif89a) {
   static constexpr uint8_t kInput[] = {
       0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80,
       0x01, 0x00, 0x40, 0x80, 0xc0, 0x80, 0x80, 0x80, 0x21, 0xf9, 0x04,
@@ -351,9 +391,11 @@ TEST(ProgressiveDecoder, Gif89a) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgra, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kArgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -365,7 +407,7 @@ TEST(ProgressiveDecoder, Gif89a) {
   EXPECT_THAT(bitmap->GetScanline(0), ElementsAre(0xc0, 0x80, 0x40, 0xff));
 }
 
-TEST(ProgressiveDecoder, GifInsufficientCodeSize) {
+TEST_F(ProgressiveDecoderTest, GifInsufficientCodeSize) {
   // This GIF causes `LZWDecompressor::Create()` to fail because the minimum
   // code size is too small for the palette.
   static constexpr uint8_t kInput[] = {
@@ -385,9 +427,11 @@ TEST(ProgressiveDecoder, GifInsufficientCodeSize) {
 
   ASSERT_EQ(1, decoder.GetWidth());
   ASSERT_EQ(1, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgra, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kArgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -398,7 +442,7 @@ TEST(ProgressiveDecoder, GifInsufficientCodeSize) {
   EXPECT_EQ(FXCODEC_STATUS::kError, status);
 }
 
-TEST(ProgressiveDecoder, GifDecodeAcrossScanlines) {
+TEST_F(ProgressiveDecoderTest, GifDecodeAcrossScanlines) {
   // This GIF contains an LZW code unit split across 2 scanlines. The decoder
   // must continue decoding the second scanline using the residual data.
   static constexpr uint8_t kInput[] = {
@@ -416,9 +460,11 @@ TEST(ProgressiveDecoder, GifDecodeAcrossScanlines) {
 
   ASSERT_EQ(4, decoder.GetWidth());
   ASSERT_EQ(2, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgra, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kArgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();
@@ -435,7 +481,7 @@ TEST(ProgressiveDecoder, GifDecodeAcrossScanlines) {
                           0x80, 0x40, 0xff, 0xc0, 0x80, 0x40, 0xff));
 }
 
-TEST(ProgressiveDecoder, GifDecodeAcrossSubblocks) {
+TEST_F(ProgressiveDecoderTest, GifDecodeAcrossSubblocks) {
   // This GIF contains a scanline split across 2 data sub-blocks. The decoder
   // must continue decoding in the second sub-block.
   static constexpr uint8_t kInput[] = {
@@ -454,9 +500,11 @@ TEST(ProgressiveDecoder, GifDecodeAcrossSubblocks) {
 
   ASSERT_EQ(4, decoder.GetWidth());
   ASSERT_EQ(2, decoder.GetHeight());
+  ASSERT_EQ(FXDIB_Format::kBgra, decoder.GetBitmapFormat());
 
   auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  bitmap->Create(decoder.GetWidth(), decoder.GetHeight(), FXDIB_Format::kArgb);
+  ASSERT_TRUE(bitmap->Create(decoder.GetWidth(), decoder.GetHeight(),
+                             decoder.GetBitmapFormat()));
 
   size_t frames;
   std::tie(status, frames) = decoder.GetFrames();

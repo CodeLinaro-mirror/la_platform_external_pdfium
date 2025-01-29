@@ -5,6 +5,8 @@
 #ifndef TESTING_EMBEDDER_TEST_H_
 #define TESTING_EMBEDDER_TEST_H_
 
+#include <stdint.h>
+
 #include <fstream>
 #include <map>
 #include <memory>
@@ -12,6 +14,8 @@
 #include <vector>
 
 #include "build/build_config.h"
+#include "core/fxcrt/span.h"
+#include "core/fxcrt/unowned_ptr.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_dataavail.h"
 #include "public/fpdf_ext.h"
@@ -19,9 +23,7 @@
 #include "public/fpdf_save.h"
 #include "public/fpdfview.h"
 #include "testing/fake_file_access.h"
-#include "testing/free_deleter.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/base/containers/span.h"
 
 class TestLoader;
 
@@ -87,8 +89,27 @@ class EmbedderTest : public ::testing::Test,
                                                  int modifiers) {}
   };
 
+  class ScopedEmbedderTestPage {
+   public:
+    ScopedEmbedderTestPage();
+    ScopedEmbedderTestPage(EmbedderTest* test, int page_index);
+    ScopedEmbedderTestPage(const ScopedEmbedderTestPage&) = delete;
+    ScopedEmbedderTestPage& operator=(const ScopedEmbedderTestPage&) = delete;
+    ScopedEmbedderTestPage(ScopedEmbedderTestPage&&) noexcept;
+    ScopedEmbedderTestPage& operator=(ScopedEmbedderTestPage&&) noexcept;
+    ~ScopedEmbedderTestPage();
+
+    FPDF_PAGE get() { return page_; }
+
+    explicit operator bool() const { return !!page_; }
+
+   private:
+    UnownedPtr<EmbedderTest> test_;
+    FPDF_PAGE page_;
+  };
+
   EmbedderTest();
-  virtual ~EmbedderTest();
+  ~EmbedderTest() override;
 
   void SetUp() override;
   void TearDown() override;
@@ -149,16 +170,29 @@ class EmbedderTest : public ::testing::Test,
   int GetPageCount();
 
   // Load a specific page of the open document with a given non-negative
-  // |page_number|. On success, fire form events for the page and return a page
+  // `page_index`. On success, fire form events for the page and return a
+  // ScopedEmbedderTestPage with the page handle. On failure, return an empty
+  // ScopedEmbedderTestPage.
+  // The caller needs to let the ScopedEmbedderTestPage go out of scope to
+  // properly unload the page, and must do so before the page's document and
+  // `this` get destroyed.
+  // The caller cannot call this for a `page_index` if it already obtained and
+  // holds the page handle for that page.
+  ScopedEmbedderTestPage LoadScopedPage(int page_index);
+
+  // Prefer LoadScopedPage() above.
+  //
+  // Load a specific page of the open document with a given non-negative
+  // `page_index`. On success, fire form events for the page and return a page
   // handle. On failure, return nullptr.
   // The caller does not own the returned page handle, but must call
   // UnloadPage() on it when done.
-  // The caller cannot call this for a |page_number| if it already obtained and
+  // The caller cannot call this for a `page_index` if it already obtained and
   // holds the page handle for that page.
-  FPDF_PAGE LoadPage(int page_number);
+  FPDF_PAGE LoadPage(int page_index);
 
   // Same as LoadPage(), but does not fire form events.
-  FPDF_PAGE LoadPageNoEvents(int page_number);
+  FPDF_PAGE LoadPageNoEvents(int page_index);
 
   // Fire form unload events and release the resources for a |page| obtained
   // from LoadPage(). Further use of |page| is prohibited after calling this.
@@ -253,7 +287,7 @@ class EmbedderTest : public ::testing::Test,
   FPDF_DOCUMENT OpenSavedDocument();
   FPDF_DOCUMENT OpenSavedDocumentWithPassword(const char* password);
   void CloseSavedDocument();
-  FPDF_PAGE LoadSavedPage(int page_number);
+  FPDF_PAGE LoadSavedPage(int page_index);
   void CloseSavedPage(FPDF_PAGE page);
 
   void VerifySavedRendering(FPDF_PAGE page,
@@ -289,7 +323,7 @@ class EmbedderTest : public ::testing::Test,
   int GetPageNumberForSavedPage(FPDF_PAGE page) const;
 
   void UnloadPageCommon(FPDF_PAGE page, bool do_events);
-  FPDF_PAGE LoadPageCommon(int page_number, bool do_events);
+  FPDF_PAGE LoadPageCommon(int page_index, bool do_events);
 
   std::unique_ptr<Delegate> default_delegate_;
   Delegate* delegate_;
@@ -300,9 +334,8 @@ class EmbedderTest : public ::testing::Test,
   int form_fill_info_version_ = 1;
 #endif  // PDF_ENABLE_XFA
 
-  size_t file_length_ = 0;
   // must outlive `loader_`.
-  std::unique_ptr<char, pdfium::FreeDeleter> file_contents_;
+  std::vector<uint8_t> file_contents_;
   std::unique_ptr<TestLoader> loader_;
   FPDF_FILEACCESS file_access_;                       // must outlive `avail_`.
   std::unique_ptr<FakeFileAccess> fake_file_access_;  // must outlive `avail_`.

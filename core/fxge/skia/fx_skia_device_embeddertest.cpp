@@ -92,8 +92,7 @@ void CommonTest(CFX_SkiaDeviceDriver* driver, const State& state) {
     driver->SetClip_PathFill(clipPath, &clipMatrix, CFX_FillRenderOptions());
   if (state.m_graphic == State::Graphic::kPath) {
     driver->DrawPath(path1, &matrix, &graphState, 0xFF112233, 0,
-                     CFX_FillRenderOptions::WindingOptions(),
-                     BlendMode::kNormal);
+                     CFX_FillRenderOptions::WindingOptions());
   } else if (state.m_graphic == State::Graphic::kText) {
     driver->DrawDeviceText(charPos, &font, matrix, fontSize, 0xFF445566,
                            kTextOptions);
@@ -103,10 +102,11 @@ void CommonTest(CFX_SkiaDeviceDriver* driver, const State& state) {
   CFX_Path path2;
   path2.AppendRect(0, 0, 2, 2);
   if (state.m_change == State::Change::kYes) {
-    if (state.m_graphic == State::Graphic::kPath)
-      graphState.m_LineCap = CFX_GraphStateData::LineCap::kRound;
-    else if (state.m_graphic == State::Graphic::kText)
+    if (state.m_graphic == State::Graphic::kPath) {
+      graphState.set_line_cap(CFX_GraphStateData::LineCap::kRound);
+    } else if (state.m_graphic == State::Graphic::kText) {
       fontSize = 2;
+    }
   }
   if (state.m_clip == State::Clip::kSame)
     driver->SetClip_PathFill(clipPath, &clipMatrix, CFX_FillRenderOptions());
@@ -116,8 +116,7 @@ void CommonTest(CFX_SkiaDeviceDriver* driver, const State& state) {
     driver->SetClip_PathFill(clipPath, &clipMatrix2, CFX_FillRenderOptions());
   if (state.m_graphic == State::Graphic::kPath) {
     driver->DrawPath(path2, &matrix2, &graphState, 0xFF112233, 0,
-                     CFX_FillRenderOptions::WindingOptions(),
-                     BlendMode::kNormal);
+                     CFX_FillRenderOptions::WindingOptions());
   } else if (state.m_graphic == State::Graphic::kText) {
     driver->DrawDeviceText(charPos, &font, matrix2, fontSize, 0xFF445566,
                            kTextOptions);
@@ -154,12 +153,13 @@ void Harness(void (*Test)(CFX_SkiaDeviceDriver*, const State&),
   constexpr int kHeight = 1;
   ScopedFPDFBitmap bitmap(FPDFBitmap_Create(kWidth, kHeight, 1));
   ASSERT_TRUE(bitmap);
-  FPDFBitmap_FillRect(bitmap.get(), 0, 0, kWidth, kHeight, 0x00000000);
+  ASSERT_TRUE(
+      FPDFBitmap_FillRect(bitmap.get(), 0, 0, kWidth, kHeight, 0x00000000));
   RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap.get()));
   auto driver = CFX_SkiaDeviceDriver::Create(pBitmap, false, nullptr, false);
   ASSERT_TRUE(driver);
   (*Test)(driver.get(), state);
-  uint32_t pixel = pBitmap->GetPixel(0, 0);
+  uint32_t pixel = pBitmap->GetPixelForTesting(0, 0);
   EXPECT_EQ(state.m_pixel, pixel);
 }
 
@@ -168,7 +168,7 @@ void RenderPageToSkCanvas(FPDF_PAGE page,
                           int start_y,
                           int size_x,
                           int size_y,
-                          SkCanvas* canvas) {
+                          SkCanvas& canvas) {
   CPDF_Page* cpdf_page = CPDFPageFromFPDFPage(page);
 
   auto context = std::make_unique<CPDF_PageRenderContext>();
@@ -178,7 +178,7 @@ void RenderPageToSkCanvas(FPDF_PAGE page,
   cpdf_page->SetRenderContext(std::move(context));
 
   auto default_device = std::make_unique<CFX_DefaultRenderDevice>();
-  default_device->AttachCanvas(canvas);
+  CHECK(default_device->AttachCanvas(canvas));
   unowned_context->m_pDevice = std::move(default_device);
 
   CPDFSDK_RenderPageWithContext(unowned_context, cpdf_page, start_x, start_y,
@@ -207,14 +207,16 @@ using FxgeSkiaEmbedderTest = EmbedderTest;
 }  // namespace
 
 TEST(fxge, SkiaStateEmpty) {
-  if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
+  if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     return;
+  }
   Harness(&EmptyTest, {});
 }
 
 TEST(fxge, SkiaStatePath) {
-  if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
+  if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     return;
+  }
   Harness(&CommonTest, {State::Change::kNo, State::Save::kYes,
                         State::Clip::kSame, State::Graphic::kPath, 0xFF112233});
   Harness(&CommonTest,
@@ -229,8 +231,9 @@ TEST(fxge, SkiaStatePath) {
 }
 
 TEST(fxge, SkiaStateText) {
-  if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
+  if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     return;
+  }
 
   Harness(&CommonTest,
           {State::Change::kNo, State::Save::kYes, State::Clip::kDifferentMatrix,
@@ -240,8 +243,9 @@ TEST(fxge, SkiaStateText) {
 }
 
 TEST(fxge, SkiaStateOOSClip) {
-  if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer())
+  if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     return;
+  }
   Harness(&OutOfSequenceClipTest, {});
 }
 
@@ -255,12 +259,12 @@ TEST_F(FxgeSkiaEmbedderTest, RenderBigImageTwice) {
   static constexpr int kPageWidth = kImageWidth / kPageToImageFactor;
   static constexpr int kPageHeight = kImageHeight / kPageToImageFactor;
 
-  if (!CFX_DefaultRenderDevice::SkiaIsDefaultRenderer()) {
+  if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     GTEST_SKIP() << "Skia is not the default renderer";
   }
 
   ASSERT_TRUE(OpenDocument("bug_2034.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   std::set<int> image_ids;
@@ -278,14 +282,12 @@ TEST_F(FxgeSkiaEmbedderTest, RenderBigImageTwice) {
       }));
 
   // Render top half.
-  RenderPageToSkCanvas(page, /*start_x=*/0, /*start_y=*/0,
-                       /*size_x=*/kPageWidth, /*size_y=*/kPageHeight, &canvas);
+  RenderPageToSkCanvas(page.get(), /*start_x=*/0, /*start_y=*/0,
+                       /*size_x=*/kPageWidth, /*size_y=*/kPageHeight, canvas);
 
   // Render bottom half.
-  RenderPageToSkCanvas(page, /*start_x=*/0, /*start_y=*/-kPageHeight / 2,
-                       /*size_x=*/kPageWidth, /*size_y=*/kPageHeight, &canvas);
+  RenderPageToSkCanvas(page.get(), /*start_x=*/0, /*start_y=*/-kPageHeight / 2,
+                       /*size_x=*/kPageWidth, /*size_y=*/kPageHeight, canvas);
 
   EXPECT_THAT(image_ids, SizeIs(1));
-
-  UnloadPage(page);
 }

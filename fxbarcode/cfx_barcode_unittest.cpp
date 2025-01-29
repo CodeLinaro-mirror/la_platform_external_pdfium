@@ -24,8 +24,9 @@ class BarcodeTest : public testing::Test {
 
     auto device = std::make_unique<CFX_DefaultRenderDevice>();
     auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-    if (bitmap->Create(640, 480, FXDIB_Format::kRgb32))
+    if (bitmap->Create(640, 480, FXDIB_Format::kBgrx)) {
       bitmap_ = bitmap;
+    }
     ASSERT_TRUE(bitmap_);
     ASSERT_TRUE(device->Attach(bitmap_));
     device_ = std::move(device);
@@ -65,7 +66,7 @@ class BarcodeTest : public testing::Test {
 };
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Code39 DISABLED_Code39
 #else
 #define MAYBE_Code39 Code39
@@ -78,7 +79,7 @@ TEST_F(BarcodeTest, MAYBE_Code39) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_CodaBar DISABLED_CodaBar
 #else
 #define MAYBE_CodaBar CodaBar
@@ -96,7 +97,7 @@ TEST_F(BarcodeTest, CodaBarLetters) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Code128 DISABLED_Code128
 #else
 #define MAYBE_Code128 Code128
@@ -109,7 +110,7 @@ TEST_F(BarcodeTest, MAYBE_Code128) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Code128B DISABLED_Code128B
 #else
 #define MAYBE_Code128B Code128B
@@ -122,7 +123,7 @@ TEST_F(BarcodeTest, MAYBE_Code128B) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Code128C DISABLED_Code128C
 #else
 #define MAYBE_Code128C Code128C
@@ -135,7 +136,7 @@ TEST_F(BarcodeTest, MAYBE_Code128C) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Code128CLetters DISABLED_Code128CLetters
 #else
 #define MAYBE_Code128CLetters Code128CLetters
@@ -148,7 +149,7 @@ TEST_F(BarcodeTest, MAYBE_Code128CLetters) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Ean8 DISABLED_Ean8
 #else
 #define MAYBE_Ean8 Ean8
@@ -166,7 +167,7 @@ TEST_F(BarcodeTest, Ean8Letters) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_UPCA DISABLED_UPCA
 #else
 #define MAYBE_UPCA UPCA
@@ -184,7 +185,7 @@ TEST_F(BarcodeTest, UPCALetters) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Ean13 DISABLED_Ean13
 #else
 #define MAYBE_Ean13 Ean13
@@ -202,7 +203,7 @@ TEST_F(BarcodeTest, Ean13Letters) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_Pdf417 DISABLED_Pdf417
 #else
 #define MAYBE_Pdf417 Pdf417
@@ -215,7 +216,7 @@ TEST_F(BarcodeTest, MAYBE_Pdf417) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_DataMatrix DISABLED_DataMatrix
 #else
 #define MAYBE_DataMatrix DataMatrix
@@ -228,7 +229,7 @@ TEST_F(BarcodeTest, MAYBE_DataMatrix) {
 }
 
 // https://crbug.com/pdfium/738
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #define MAYBE_QrCode DISABLED_QrCode
 #else
 #define MAYBE_QrCode QrCode

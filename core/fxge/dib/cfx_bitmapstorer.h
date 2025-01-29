@@ -7,9 +7,11 @@
 #ifndef CORE_FXGE_DIB_CFX_BITMAPSTORER_H_
 #define CORE_FXGE_DIB_CFX_BITMAPSTORER_H_
 
+#include <stdint.h>
+
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/dib/scanlinecomposer_iface.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_DIBitmap;
 
@@ -23,7 +25,7 @@ class CFX_BitmapStorer final : public ScanlineComposerIface {
   bool SetInfo(int width,
                int height,
                FXDIB_Format src_format,
-               pdfium::span<const uint32_t> src_palette) override;
+               DataVector<uint32_t> src_palette) override;
 
   RetainPtr<CFX_DIBitmap> GetBitmap() { return m_pBitmap; }
   RetainPtr<CFX_DIBitmap> Detach();

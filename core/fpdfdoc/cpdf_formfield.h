@@ -72,7 +72,7 @@ class CPDF_FormField {
   CPDF_FormField(CPDF_InteractiveForm* pForm, RetainPtr<CPDF_Dictionary> pDict);
   ~CPDF_FormField();
 
-  static absl::optional<FormFieldType> IntToFormFieldType(int value);
+  static std::optional<FormFieldType> IntToFormFieldType(int value);
   static WideString GetFullNameForDict(const CPDF_Dictionary* pFieldDict);
   static RetainPtr<const CPDF_Object> GetFieldAttrForDict(
       const CPDF_Dictionary* pFieldDict,
@@ -117,6 +117,10 @@ class CPDF_FormField {
   bool SetItemSelection(int index, NotificationOption notify);
 
   int GetDefaultSelectedItem() const;
+
+  bool HasOptField() const;
+
+  // These can only be called if HasOptField() returns true.
   int CountOptions() const;
   WideString GetOptionLabel(int index) const;
   WideString GetOptionValue(int index) const;
@@ -147,7 +151,6 @@ class CPDF_FormField {
   void InitFieldFlags();
   int FindListSel(CPDF_String* str);
   WideString GetOptionText(int index, int sub_index) const;
-  void LoadDA();
   bool SetCheckValue(const WideString& value,
                      bool bDefault,
                      NotificationOption notify);

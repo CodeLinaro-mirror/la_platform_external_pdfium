@@ -19,10 +19,9 @@
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fpdfapi/parser/cpdf_syntax_parser.h"
 #include "core/fxcrt/cfx_bitstream.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_safe_types.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
 
 namespace {
 
@@ -326,7 +325,7 @@ bool CPDF_HintTables::ReadSharedObjHintTable(CFX_BitStream* hStream,
   }
 
   m_SharedObjGroupInfos.resize(dwSharedObjTotal);
-  // Table F.6 –  Shared object hint table, shared object group entries:
+  // Table F.6 - Shared object hint table, shared object group entries:
   // Item 1: A number that, when added to the least shared object
   // group length.
   FX_SAFE_FILESIZE prev_shared_group_end_offset = m_szFirstPageObjOffset;
@@ -445,11 +444,8 @@ bool CPDF_HintTables::LoadHintStream(CPDF_Stream* pHintStream) {
   if (!pHintStream || !m_pLinearized->HasHintTable())
     return false;
 
-  RetainPtr<const CPDF_Dictionary> pDict = pHintStream->GetDict();
-  if (!pDict)
-    return false;
-
-  RetainPtr<const CPDF_Object> pOffset = pDict->GetObjectFor("S");
+  RetainPtr<const CPDF_Object> pOffset =
+      pHintStream->GetDict()->GetObjectFor("S");
   if (!pOffset || !pOffset->IsNumber())
     return false;
 
@@ -475,7 +471,7 @@ bool CPDF_HintTables::LoadHintStream(CPDF_Stream* pHintStream) {
     return false;
   }
 
-  CFX_BitStream bs(pAcc->GetSpan().subspan(0, size));
+  CFX_BitStream bs(pAcc->GetSpan().first(size));
   return ReadPageHintTable(&bs) &&
          ReadSharedObjHintTable(&bs, shared_hint_table_offset);
 }

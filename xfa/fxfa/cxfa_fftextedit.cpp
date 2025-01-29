@@ -8,7 +8,7 @@
 
 #include <utility>
 
-#include "third_party/base/check.h"
+#include "core/fxcrt/check.h"
 #include "xfa/fwl/cfwl_datetimepicker.h"
 #include "xfa/fwl/cfwl_edit.h"
 #include "xfa/fwl/cfwl_eventtextwillchange.h"
@@ -94,13 +94,11 @@ void CXFA_FFTextEdit::UpdateWidgetProperty() {
     dwExtendedStyle |= FWL_STYLEEXT_EDT_MultiLine;
   }
 
-  XFA_Element eType;
-  int32_t iMaxChars;
-  std::tie(eType, iMaxChars) = m_pNode->GetMaxChars();
+  auto [eType, iMaxChars] = m_pNode->GetMaxChars();
   if (eType == XFA_Element::ExData)
     iMaxChars = 0;
 
-  absl::optional<int32_t> numCells = m_pNode->GetNumberOfCells();
+  std::optional<int32_t> numCells = m_pNode->GetNumberOfCells();
   if (!numCells.has_value()) {
     pWidget->SetLimit(iMaxChars);
   } else if (numCells == 0) {
@@ -281,9 +279,7 @@ bool CXFA_FFTextEdit::UpdateFWLData() {
   bool bUpdate = false;
   if (m_pNode->GetFFWidgetType() == XFA_FFWidgetType::kTextEdit &&
       !m_pNode->GetNumberOfCells().has_value()) {
-    XFA_Element elementType;
-    int32_t iMaxChars;
-    std::tie(elementType, iMaxChars) = m_pNode->GetMaxChars();
+    auto [elementType, iMaxChars] = m_pNode->GetMaxChars();
     if (elementType == XFA_Element::ExData)
       iMaxChars = eType == XFA_ValuePicture::kEdit ? iMaxChars : 0;
     if (pEdit->GetLimit() != iMaxChars) {
@@ -317,8 +313,7 @@ void CXFA_FFTextEdit::OnTextWillChange(CFWL_Widget* pWidget,
                                        CFWL_EventTextWillChange* event) {
   GetLayoutItem()->SetStatusBits(XFA_WidgetStatus::kTextEditValueChanged);
 
-  CXFA_EventParam eParam;
-  eParam.m_eType = XFA_EVENT_Change;
+  CXFA_EventParam eParam(XFA_EVENT_Change);
   eParam.m_wsChange = event->GetChangeText();
   eParam.m_wsPrevText = event->GetPreviousText();
   eParam.m_iSelStart = static_cast<int32_t>(event->GetSelectionStart());
@@ -334,8 +329,7 @@ void CXFA_FFTextEdit::OnTextWillChange(CFWL_Widget* pWidget,
 }
 
 void CXFA_FFTextEdit::OnTextFull(CFWL_Widget* pWidget) {
-  CXFA_EventParam eParam;
-  eParam.m_eType = XFA_EVENT_Full;
+  CXFA_EventParam eParam(XFA_EVENT_Full);
   m_pNode->ProcessEvent(GetDocView(), XFA_AttributeValue::Full, &eParam);
 }
 
@@ -399,11 +393,11 @@ bool CXFA_FFTextEdit::Redo() {
   return ToEdit(GetNormalWidget())->Redo();
 }
 
-absl::optional<WideString> CXFA_FFTextEdit::Copy() {
+std::optional<WideString> CXFA_FFTextEdit::Copy() {
   return ToEdit(GetNormalWidget())->Copy();
 }
 
-absl::optional<WideString> CXFA_FFTextEdit::Cut() {
+std::optional<WideString> CXFA_FFTextEdit::Cut() {
   return ToEdit(GetNormalWidget())->Cut();
 }
 

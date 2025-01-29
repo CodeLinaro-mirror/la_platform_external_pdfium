@@ -7,8 +7,8 @@
 #include "fxjs/xfa/cjx_packet.h"
 
 #include <utility>
-#include <vector>
 
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/xml/cfx_xmldocument.h"
 #include "core/fxcrt/xml/cfx_xmlelement.h"
 #include "core/fxcrt/xml/cfx_xmltext.h"
@@ -35,9 +35,8 @@ bool CJX_Packet::DynamicTypeIs(TypeTag eType) const {
   return eType == static_type__ || ParentType__::DynamicTypeIs(eType);
 }
 
-CJS_Result CJX_Packet::getAttribute(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Packet::getAttribute(CFXJSE_Engine* runtime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -50,9 +49,8 @@ CJS_Result CJX_Packet::getAttribute(
       runtime->NewString(attributeValue.ToUTF8().AsStringView()));
 }
 
-CJS_Result CJX_Packet::setAttribute(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Packet::setAttribute(CFXJSE_Engine* runtime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 2)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -66,7 +64,7 @@ CJS_Result CJX_Packet::setAttribute(
 
 CJS_Result CJX_Packet::removeAttribute(
     CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
 

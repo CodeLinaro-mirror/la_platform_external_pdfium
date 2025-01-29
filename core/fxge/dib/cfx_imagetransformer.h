@@ -39,7 +39,7 @@ class CFX_ImageTransformer {
     uint32_t pitch;
   };
 
-  CFX_ImageTransformer(const RetainPtr<const CFX_DIBBase>& pSrc,
+  CFX_ImageTransformer(RetainPtr<const CFX_DIBBase> source,
                        const CFX_Matrix& matrix,
                        const FXDIB_ResampleOptions& options,
                        const FX_RECT* pClip);
@@ -63,7 +63,9 @@ class CFX_ImageTransformer {
 
   void CalcAlpha(const CalcData& calc_data);
   void CalcMono(const CalcData& calc_data);
-  void CalcColor(const CalcData& calc_data, FXDIB_Format format, int Bpp);
+  void CalcColor(const CalcData& calc_data,
+                 FXDIB_Format format,
+                 int src_bytes_per_pixel);
 
   RetainPtr<const CFX_DIBBase> const m_pSrc;
   const CFX_Matrix m_matrix;

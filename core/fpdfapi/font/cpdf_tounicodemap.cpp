@@ -6,6 +6,7 @@
 
 #include "core/fpdfapi/font/cpdf_tounicodemap.h"
 
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -14,10 +15,9 @@
 #include "core/fpdfapi/parser/cpdf_simple_parser.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_safe_types.h"
-#include "third_party/base/containers/contains.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
@@ -79,7 +79,7 @@ size_t CPDF_ToUnicodeMap::GetUnicodeCountByCharcodeForTesting(
 }
 
 // static
-absl::optional<uint32_t> CPDF_ToUnicodeMap::StringToCode(ByteStringView input) {
+std::optional<uint32_t> CPDF_ToUnicodeMap::StringToCode(ByteStringView input) {
   // Ignore whitespaces within `input`. See https://crbug.com/pdfium/2065.
   std::set<char> seen_whitespace_chars;
   for (char c : input) {
@@ -103,18 +103,18 @@ absl::optional<uint32_t> CPDF_ToUnicodeMap::StringToCode(ByteStringView input) {
 
   size_t len = str.GetLength();
   if (len <= 2 || str[0] != '<' || str[len - 1] != '>')
-    return absl::nullopt;
+    return std::nullopt;
 
   FX_SAFE_UINT32 code = 0;
   for (char c : str.Substr(1, len - 2)) {
     if (!FXSYS_IsHexDigit(c))
-      return absl::nullopt;
+      return std::nullopt;
 
     code = code * 16 + FXSYS_HexCharToInt(c);
     if (!code.IsValid())
-      return absl::nullopt;
+      return std::nullopt;
   }
-  return absl::optional<uint32_t>(code.ValueOrDie());
+  return std::optional<uint32_t>(code.ValueOrDie());
 }
 
 // static
@@ -175,7 +175,7 @@ void CPDF_ToUnicodeMap::HandleBeginBFChar(CPDF_SimpleParser* pParser) {
     if (word.IsEmpty() || word == "endbfchar")
       return;
 
-    absl::optional<uint32_t> code = StringToCode(word);
+    std::optional<uint32_t> code = StringToCode(word);
     if (!code.has_value())
       return;
 
@@ -189,12 +189,12 @@ void CPDF_ToUnicodeMap::HandleBeginBFRange(CPDF_SimpleParser* pParser) {
     if (lowcode_str.IsEmpty() || lowcode_str == "endbfrange")
       return;
 
-    absl::optional<uint32_t> lowcode_opt = StringToCode(lowcode_str);
+    std::optional<uint32_t> lowcode_opt = StringToCode(lowcode_str);
     if (!lowcode_opt.has_value())
       return;
 
     ByteStringView highcode_str = pParser->GetWord();
-    absl::optional<uint32_t> highcode_opt = StringToCode(highcode_str);
+    std::optional<uint32_t> highcode_opt = StringToCode(highcode_str);
     if (!highcode_opt.has_value())
       return;
 
@@ -203,9 +203,11 @@ void CPDF_ToUnicodeMap::HandleBeginBFRange(CPDF_SimpleParser* pParser) {
 
     ByteStringView start = pParser->GetWord();
     if (start == "[") {
-      for (FX_SAFE_UINT32 code = lowcode;
-           code.IsValid() && code.ValueOrDie() <= highcode; code++) {
-        SetCode(code.ValueOrDie(), StringToWideString(pParser->GetWord()));
+      for (uint32_t code = lowcode; code <= highcode; ++code) {
+        SetCode(code, StringToWideString(pParser->GetWord()));
+        if (code == std::numeric_limits<uint32_t>::max()) {
+          break;
+        }
       }
       pParser->GetWord();
       continue;
@@ -213,24 +215,27 @@ void CPDF_ToUnicodeMap::HandleBeginBFRange(CPDF_SimpleParser* pParser) {
 
     WideString destcode = StringToWideString(start);
     if (destcode.GetLength() == 1) {
-      absl::optional<uint32_t> value_or_error = StringToCode(start);
+      std::optional<uint32_t> value_or_error = StringToCode(start);
       if (!value_or_error.has_value())
         return;
 
       uint32_t value = value_or_error.value();
-      for (FX_SAFE_UINT32 code = lowcode;
-           code.IsValid() && code.ValueOrDie() <= highcode; code++) {
-        InsertIntoMultimap(code.ValueOrDie(), value++);
+      for (uint32_t code = lowcode; code <= highcode; ++code) {
+        InsertIntoMultimap(code, value++);
+        if (code == std::numeric_limits<uint32_t>::max()) {
+          break;
+        }
       }
     } else {
-      for (FX_SAFE_UINT32 code = lowcode;
-           code.IsValid() && code.ValueOrDie() <= highcode; code++) {
-        uint32_t code_value = code.ValueOrDie();
+      for (uint32_t code = lowcode; code <= highcode; ++code) {
         WideString retcode =
-            code_value == lowcode ? destcode : StringDataAdd(destcode);
-        InsertIntoMultimap(code_value, GetMultiCharIndexIndicator());
+            code == lowcode ? destcode : StringDataAdd(destcode);
+        InsertIntoMultimap(code, GetMultiCharIndexIndicator());
         m_MultiCharVec.push_back(retcode);
         destcode = std::move(retcode);
+        if (code == std::numeric_limits<uint32_t>::max()) {
+          break;
+        }
       }
     }
   }

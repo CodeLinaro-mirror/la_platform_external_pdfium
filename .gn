@@ -2,18 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(crbug.com/pdfium/1932): Switch back to //build/config/BUILDCONFIG.gn if
-# appropriate.
-buildconfig = "//build_overrides/BUILDCONFIG.gn"
+buildconfig = "//build/config/BUILDCONFIG.gn"
 
 # The python interpreter to use by default. On Windows, this will look
 # for python3.exe and python3.bat.
 script_executable = "python3"
 
 default_args = {
-  # Required for the Fuchsia SDK
-  fuchsia_target_api_level = 11
-
   # PDFs only need to run JavaScript.
   v8_enable_webassembly = false
 
@@ -23,6 +18,15 @@ default_args = {
   # PDFium is currently incompatible with the V8 Sandbox.
   # See https://crbug.com/v8/13014 for details.
   v8_enable_sandbox = false
+
+  # Suppress V8_DEPRECATE_SOON warnings to match the chromium build
+  # (at the moment). This is why chromium builds including pdfium
+  # currently build against the latest V8, but standalone builds
+  # give warnings.
+  v8_imminent_deprecation_warnings = false
+
+  # PDFium has its own unsafe-buffers enforcement directories.
+  clang_unsafe_buffers_paths = "//pdfium_unsafe_buffers_paths.txt"
 }
 
 no_check_targets = [
