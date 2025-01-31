@@ -29,9 +29,6 @@
 
 TIFFErrorHandlerExt _TIFFerrorHandlerExt = NULL;
 
-TIFFErrorHandler _TIFFwarningHandler = NULL;
-TIFFErrorHandler _TIFFerrorHandler = NULL;
-
 TIFFErrorHandler TIFFSetErrorHandler(TIFFErrorHandler handler)
 {
     TIFFErrorHandler prev = _TIFFerrorHandler;

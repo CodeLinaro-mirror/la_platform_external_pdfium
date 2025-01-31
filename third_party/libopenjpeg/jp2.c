@@ -1609,40 +1609,6 @@ static OPJ_BOOL opj_jp2_read_colr(opj_jp2_t *jp2,
     return OPJ_TRUE;
 }
 
-static OPJ_BOOL opj_jp2_apply_color_postprocessing(opj_jp2_t *jp2,
-        opj_image_t* p_image,
-        opj_event_mgr_t * p_manager)
-{
-    if (jp2->j2k->m_specific_param.m_decoder.m_numcomps_to_decode) {
-        /* Bypass all JP2 component transforms */
-        return OPJ_TRUE;
-    }
-
-    if (!jp2->ignore_pclr_cmap_cdef) {
-        if (!opj_jp2_check_color(p_image, &(jp2->color), p_manager)) {
-            return OPJ_FALSE;
-        }
-
-        if (jp2->color.jp2_pclr) {
-            /* Part 1, I.5.3.4: Either both or none : */
-            if (!jp2->color.jp2_pclr->cmap) {
-                opj_jp2_free_pclr(&(jp2->color));
-            } else {
-                if (!opj_jp2_apply_pclr(p_image, &(jp2->color), p_manager)) {
-                    return OPJ_FALSE;
-                }
-            }
-        }
-
-        /* Apply the color space if needed */
-        if (jp2->color.jp2_cdef) {
-            opj_jp2_apply_cdef(p_image, &(jp2->color), p_manager);
-        }
-    }
-
-    return OPJ_TRUE;
-}
-
 OPJ_BOOL opj_jp2_decode(void *p_jp2,
                         opj_stream_private_t *p_stream,
                         opj_image_t* p_image,
@@ -1660,7 +1626,55 @@ OPJ_BOOL opj_jp2_decode(void *p_jp2,
         return OPJ_FALSE;
     }
 
-    return opj_jp2_apply_color_postprocessing(jp2, p_image, p_manager);
+    if (jp2->j2k->m_specific_param.m_decoder.m_numcomps_to_decode) {
+        /* Bypass all JP2 component transforms */
+        return OPJ_TRUE;
+    }
+
+    if (!jp2->ignore_pclr_cmap_cdef) {
+        if (!opj_jp2_check_color(p_image, &(jp2->color), p_manager)) {
+            return OPJ_FALSE;
+        }
+
+        /* Set Image Color Space */
+        if (jp2->enumcs == 16) {
+            p_image->color_space = OPJ_CLRSPC_SRGB;
+        } else if (jp2->enumcs == 17) {
+            p_image->color_space = OPJ_CLRSPC_GRAY;
+        } else if (jp2->enumcs == 18) {
+            p_image->color_space = OPJ_CLRSPC_SYCC;
+        } else if (jp2->enumcs == 24) {
+            p_image->color_space = OPJ_CLRSPC_EYCC;
+        } else if (jp2->enumcs == 12) {
+            p_image->color_space = OPJ_CLRSPC_CMYK;
+        } else {
+            p_image->color_space = OPJ_CLRSPC_UNKNOWN;
+        }
+
+        if (jp2->color.jp2_pclr) {
+            /* Part 1, I.5.3.4: Either both or none : */
+            if (!jp2->color.jp2_pclr->cmap) {
+                opj_jp2_free_pclr(&(jp2->color));
+            } else {
+                if (!opj_jp2_apply_pclr(p_image, &(jp2->color), p_manager)) {
+                    return OPJ_FALSE;
+                }
+            }
+        }
+
+        /* Apply the color space if needed */
+        if (jp2->color.jp2_cdef) {
+            opj_jp2_apply_cdef(p_image, &(jp2->color), p_manager);
+        }
+
+        if (jp2->color.icc_profile_buf) {
+            p_image->icc_profile_buf = jp2->color.icc_profile_buf;
+            p_image->icc_profile_len = jp2->color.icc_profile_len;
+            jp2->color.icc_profile_buf = NULL;
+        }
+    }
+
+    return OPJ_TRUE;
 }
 
 static OPJ_BOOL opj_jp2_write_jp2h(opj_jp2_t *jp2,
@@ -2855,8 +2869,6 @@ OPJ_BOOL opj_jp2_read_header(opj_stream_private_t *p_stream,
                             )
 {
     opj_jp2_t *jp2 = (opj_jp2_t*)p_jp2;
-    int ret;
-
     /* preconditions */
     assert(jp2 != 00);
     assert(p_stream != 00);
@@ -2890,34 +2902,10 @@ OPJ_BOOL opj_jp2_read_header(opj_stream_private_t *p_stream,
         return OPJ_FALSE;
     }
 
-    ret = opj_j2k_read_header(p_stream,
-                              jp2->j2k,
-                              p_image,
-                              p_manager);
-
-    if (p_image && *p_image) {
-        /* Set Image Color Space */
-        if (jp2->enumcs == 16) {
-            (*p_image)->color_space = OPJ_CLRSPC_SRGB;
-        } else if (jp2->enumcs == 17) {
-            (*p_image)->color_space = OPJ_CLRSPC_GRAY;
-        } else if (jp2->enumcs == 18) {
-            (*p_image)->color_space = OPJ_CLRSPC_SYCC;
-        } else if (jp2->enumcs == 24) {
-            (*p_image)->color_space = OPJ_CLRSPC_EYCC;
-        } else if (jp2->enumcs == 12) {
-            (*p_image)->color_space = OPJ_CLRSPC_CMYK;
-        } else {
-            (*p_image)->color_space = OPJ_CLRSPC_UNKNOWN;
-        }
-
-        if (jp2->color.icc_profile_buf) {
-            (*p_image)->icc_profile_buf = jp2->color.icc_profile_buf;
-            (*p_image)->icc_profile_len = jp2->color.icc_profile_len;
-            jp2->color.icc_profile_buf = NULL;
-        }
-    }
-    return ret;
+    return opj_j2k_read_header(p_stream,
+                               jp2->j2k,
+                               p_image,
+                               p_manager);
 }
 
 static OPJ_BOOL opj_jp2_setup_encoding_validation(opj_jp2_t *jp2,
@@ -3168,7 +3156,53 @@ OPJ_BOOL opj_jp2_get_tile(void *jp2,
         return OPJ_FALSE;
     }
 
-    return opj_jp2_apply_color_postprocessing(p_jp2, p_image, p_manager);
+    if (p_jp2->j2k->m_specific_param.m_decoder.m_numcomps_to_decode) {
+        /* Bypass all JP2 component transforms */
+        return OPJ_TRUE;
+    }
+
+    if (!opj_jp2_check_color(p_image, &(p_jp2->color), p_manager)) {
+        return OPJ_FALSE;
+    }
+
+    /* Set Image Color Space */
+    if (p_jp2->enumcs == 16) {
+        p_image->color_space = OPJ_CLRSPC_SRGB;
+    } else if (p_jp2->enumcs == 17) {
+        p_image->color_space = OPJ_CLRSPC_GRAY;
+    } else if (p_jp2->enumcs == 18) {
+        p_image->color_space = OPJ_CLRSPC_SYCC;
+    } else if (p_jp2->enumcs == 24) {
+        p_image->color_space = OPJ_CLRSPC_EYCC;
+    } else if (p_jp2->enumcs == 12) {
+        p_image->color_space = OPJ_CLRSPC_CMYK;
+    } else {
+        p_image->color_space = OPJ_CLRSPC_UNKNOWN;
+    }
+
+    if (p_jp2->color.jp2_pclr) {
+        /* Part 1, I.5.3.4: Either both or none : */
+        if (!p_jp2->color.jp2_pclr->cmap) {
+            opj_jp2_free_pclr(&(p_jp2->color));
+        } else {
+            if (!opj_jp2_apply_pclr(p_image, &(p_jp2->color), p_manager)) {
+                return OPJ_FALSE;
+            }
+        }
+    }
+
+    /* Apply the color space if needed */
+    if (p_jp2->color.jp2_cdef) {
+        opj_jp2_apply_cdef(p_image, &(p_jp2->color), p_manager);
+    }
+
+    if (p_jp2->color.icc_profile_buf) {
+        p_image->icc_profile_buf = p_jp2->color.icc_profile_buf;
+        p_image->icc_profile_len = p_jp2->color.icc_profile_len;
+        p_jp2->color.icc_profile_buf = NULL;
+    }
+
+    return OPJ_TRUE;
 }
 
 /* ----------------------------------------------------------------------- */

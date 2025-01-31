@@ -55,8 +55,6 @@
 #include <ctype.h>
 #include <assert.h>
 #include <limits.h>
-#include <stdint.h>
-#include <inttypes.h>
 
 /*
   Use fseeko() and ftello() if they are available since they use
@@ -220,6 +218,7 @@ typedef unsigned int OPJ_BITFIELD;
 
 #define OPJ_UNUSED(x) (void)x
 
+#include "opj_inttypes.h"
 #include "opj_malloc.h"
 #include "event.h"
 #include "function_list.h"

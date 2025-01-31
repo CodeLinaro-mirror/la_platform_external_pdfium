@@ -2088,9 +2088,7 @@ static OPJ_BOOL opj_dwt_decode_tile(opj_thread_pool_t* tp,
     OPJ_SIZE_T h_mem_size;
     int num_threads;
 
-    /* Not entirely sure for the return code of w == 0 which is triggered per */
-    /* https://github.com/uclouvain/openjpeg/issues/1505 */
-    if (numres == 1U || w == 0) {
+    if (numres == 1U) {
         return OPJ_TRUE;
     }
     num_threads = opj_thread_pool_get_thread_count(tp);

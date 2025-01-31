@@ -175,7 +175,11 @@
 
 /* Native cpu byte order: 1 if big-endian (Motorola) or 0 if little-endian
    (Intel) */
-#define HOST_BIGENDIAN 0
+#if _FX_ENDIAN_ == _FX_BIG_ENDIAN_
+# define HOST_BIGENDIAN 1
+#else
+# define HOST_BIGENDIAN 0
+#endif
 
 /* Support CCITT Group 3 & 4 algorithms */
 #define CCITT_SUPPORT 1
@@ -209,7 +213,7 @@
 /* #undef ZIP_SUPPORT */
 
 /* Support strip chopping (whether or not to convert single-strip uncompressed
-   images to multiple strips of ~8Kb to reduce memory usage) */
+   images to mutiple strips of ~8Kb to reduce memory usage) */
 #define STRIPCHOP_DEFAULT TIFF_STRIPCHOP
 
 /* Enable SubIFD tag (330) support */
