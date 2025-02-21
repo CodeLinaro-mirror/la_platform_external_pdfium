@@ -6,7 +6,10 @@
 
 #include "core/fxge/renderdevicedriver_iface.h"
 
+#include <utility>
+
 #include "core/fxcrt/fx_coordinates.h"
+#include "core/fxge/agg/cfx_agg_imagerenderer.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 
@@ -21,30 +24,28 @@ bool RenderDeviceDriverIface::SetClip_PathStroke(
 
 void RenderDeviceDriverIface::SetBaseClip(const FX_RECT& rect) {}
 
-bool RenderDeviceDriverIface::FillRectWithBlend(const FX_RECT& rect,
-                                                uint32_t fill_color,
-                                                BlendMode blend_type) {
+bool RenderDeviceDriverIface::FillRect(const FX_RECT& rect,
+                                       uint32_t fill_color) {
   return false;
 }
 
 bool RenderDeviceDriverIface::DrawCosmeticLine(const CFX_PointF& ptMoveTo,
                                                const CFX_PointF& ptLineTo,
-                                               uint32_t color,
-                                               BlendMode blend_type) {
+                                               uint32_t color) {
   return false;
 }
 
-bool RenderDeviceDriverIface::GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap,
+bool RenderDeviceDriverIface::GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                                         int left,
-                                        int top) {
+                                        int top) const {
   return false;
 }
 
-RetainPtr<CFX_DIBitmap> RenderDeviceDriverIface::GetBackDrop() {
-  return RetainPtr<CFX_DIBitmap>();
+RetainPtr<const CFX_DIBitmap> RenderDeviceDriverIface::GetBackDrop() const {
+  return RetainPtr<const CFX_DIBitmap>();
 }
 
-bool RenderDeviceDriverIface::ContinueDIBits(CFX_ImageRenderer* handle,
+bool RenderDeviceDriverIface::ContinueDIBits(CFX_AggImageRenderer* handle,
                                              PauseIndicatorIface* pPause) {
   return false;
 }
@@ -63,24 +64,32 @@ int RenderDeviceDriverIface::GetDriverType() const {
   return 0;
 }
 
-bool RenderDeviceDriverIface::DrawShading(const CPDF_ShadingPattern* pPattern,
-                                          const CFX_Matrix* pMatrix,
+#if defined(PDF_USE_SKIA)
+bool RenderDeviceDriverIface::DrawShading(const CPDF_ShadingPattern& pattern,
+                                          const CFX_Matrix& matrix,
                                           const FX_RECT& clip_rect,
-                                          int alpha,
-                                          bool bAlphaMode) {
+                                          int alpha) {
   return false;
 }
 
-#if defined(_SKIA_SUPPORT_)
 bool RenderDeviceDriverIface::SetBitsWithMask(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
-    const RetainPtr<CFX_DIBBase>& pMask,
+    RetainPtr<const CFX_DIBBase> bitmap,
+    RetainPtr<const CFX_DIBBase> mask,
     int left,
     int top,
-    int bitmap_alpha,
+    float alpha,
     BlendMode blend_type) {
   return false;
 }
 
 void RenderDeviceDriverIface::SetGroupKnockout(bool group_knockout) {}
-#endif
+
+void RenderDeviceDriverIface::SyncInternalBitmaps() {}
+#endif  // defined(PDF_USE_SKIA)
+
+RenderDeviceDriverIface::StartResult::StartResult(
+    Result result,
+    std::unique_ptr<CFX_AggImageRenderer> agg_image_renderer)
+    : result(result), agg_image_renderer(std::move(agg_image_renderer)) {}
+
+RenderDeviceDriverIface::StartResult::~StartResult() = default;

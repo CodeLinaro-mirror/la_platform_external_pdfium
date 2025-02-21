@@ -6,7 +6,7 @@
 
 #include <sstream>
 
-#include "third_party/base/notreached.h"
+#include "core/fxcrt/notreached.h"
 
 CPDF_StringArchiveStream::CPDF_StringArchiveStream(fxcrt::ostringstream* stream)
     : stream_(stream) {}
@@ -18,6 +18,7 @@ FX_FILESIZE CPDF_StringArchiveStream::CurrentOffset() const {
 }
 
 bool CPDF_StringArchiveStream::WriteBlock(pdfium::span<const uint8_t> buffer) {
-  stream_->write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+  auto chars = pdfium::as_chars(buffer);
+  stream_->write(chars.data(), chars.size());
   return true;
 }

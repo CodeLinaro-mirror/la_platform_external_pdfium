@@ -10,10 +10,10 @@
 #include <utility>
 
 #include "core/fxcrt/autorestorer.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/widetext_buffer.h"
 #include "fxjs/gc/container_trace.h"
-#include "third_party/base/check.h"
 #include "v8/include/cppgc/visitor.h"
 #include "xfa/fxfa/formcalc/cxfa_fmtojavascriptdepth.h"
 
@@ -773,7 +773,7 @@ void CXFA_FMAST::Trace(cppgc::Visitor* visitor) const {
   ContainerTrace(visitor, expressions_);
 }
 
-absl::optional<WideTextBuffer> CXFA_FMAST::ToJavaScript() const {
+std::optional<WideTextBuffer> CXFA_FMAST::ToJavaScript() const {
   WideTextBuffer js;
   if (expressions_.empty()) {
     js << "// comments only";
@@ -798,13 +798,13 @@ absl::optional<WideTextBuffer> CXFA_FMAST::ToJavaScript() const {
             ? CXFA_FMAssignExpression::ReturnType::kImplied
             : CXFA_FMAssignExpression::ReturnType::kInferred;
     if (!expr->ToJavaScript(&js, ret_type))
-      return absl::nullopt;
+      return std::nullopt;
   }
   js << "return pfm_rt.get_val(pfm_ret);\n";
   js << "}).call(this);";
 
   if (CXFA_IsTooBig(js))
-    return absl::nullopt;
+    return std::nullopt;
 
   return js;
 }
@@ -1042,7 +1042,7 @@ bool CXFA_FMWhileExpression::ToJavaScript(WideTextBuffer* js,
   return !CXFA_IsTooBig(*js);
 }
 
-CXFA_FMBreakExpression::CXFA_FMBreakExpression() : CXFA_FMExpression() {}
+CXFA_FMBreakExpression::CXFA_FMBreakExpression() = default;
 
 CXFA_FMBreakExpression::~CXFA_FMBreakExpression() = default;
 
@@ -1056,7 +1056,7 @@ bool CXFA_FMBreakExpression::ToJavaScript(WideTextBuffer* js,
   return !CXFA_IsTooBig(*js);
 }
 
-CXFA_FMContinueExpression::CXFA_FMContinueExpression() : CXFA_FMExpression() {}
+CXFA_FMContinueExpression::CXFA_FMContinueExpression() = default;
 
 CXFA_FMContinueExpression::~CXFA_FMContinueExpression() = default;
 
