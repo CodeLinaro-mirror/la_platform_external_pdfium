@@ -7,29 +7,30 @@
 #include "core/fxcodec/jpeg/jpegmodule.h"
 
 #include <setjmp.h>
-#include <stdint.h>
-#include <string.h>
 
 #include <memory>
+#include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "build/build_config.h"
 #include "core/fxcodec/cfx_codec_memory.h"
 #include "core/fxcodec/jpeg/jpeg_common.h"
 #include "core/fxcodec/scanlinedecoder.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/raw_span.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
 
 static pdfium::span<const uint8_t> JpegScanSOI(
     pdfium::span<const uint8_t> src_span) {
   DCHECK(!src_span.empty());
 
-  for (size_t offset = 0; offset < src_span.size() - 1; ++offset) {
+  for (size_t offset = 0; offset + 1 < src_span.size(); ++offset) {
     if (src_span[offset] == 0xff && src_span[offset + 1] == 0xd8)
       return src_span.subspan(offset);
   }
@@ -46,7 +47,8 @@ static void src_skip_data(jpeg_decompress_struct* cinfo, long num) {
   if (num > (long)cinfo->src->bytes_in_buffer) {
     error_fatal((j_common_ptr)cinfo);
   }
-  cinfo->src->next_input_byte += num;
+  // SAFETY: required from library API as checked above.
+  UNSAFE_BUFFERS(cinfo->src->next_input_byte += num);
   cinfo->src->bytes_in_buffer -= num;
 }
 
@@ -146,7 +148,7 @@ class JpegDecoder final : public ScanlineDecoder {
   // Patch up the JPEG trailer, even if it is correct.
   void PatchUpTrailer();
 
-  uint8_t* GetWritableSrcData();
+  pdfium::span<uint8_t> GetWritableSrcData();
 
   // For a given invalid height byte offset in
   // |kKnownBadHeaderWithInvalidHeightByteOffsetStarts|, the SOFn marker should
@@ -154,22 +156,22 @@ class JpegDecoder final : public ScanlineDecoder {
   static constexpr size_t kSofMarkerByteOffset = 5;
 
   jmp_buf m_JmpBuf;
-  jpeg_decompress_struct m_Cinfo;
-  jpeg_error_mgr m_Jerr;
-  jpeg_source_mgr m_Src;
-  pdfium::span<const uint8_t> m_SrcSpan;
+  jpeg_decompress_struct m_Cinfo = {};
+  jpeg_error_mgr m_Jerr = {};
+  jpeg_source_mgr m_Src = {};
+  pdfium::raw_span<const uint8_t> m_SrcSpan;
   DataVector<uint8_t> m_ScanlineBuf;
   bool m_bInited = false;
   bool m_bStarted = false;
   bool m_bJpegTransform = false;
   uint32_t m_nDefaultScaleDenom = 1;
+
+  static_assert(std::is_aggregate_v<decltype(m_Cinfo)>);
+  static_assert(std::is_aggregate_v<decltype(m_Jerr)>);
+  static_assert(std::is_aggregate_v<decltype(m_Src)>);
 };
 
-JpegDecoder::JpegDecoder() {
-  memset(&m_Cinfo, 0, sizeof(m_Cinfo));
-  memset(&m_Jerr, 0, sizeof(m_Jerr));
-  memset(&m_Src, 0, sizeof(m_Src));
-}
+JpegDecoder::JpegDecoder() = default;
 
 JpegDecoder::~JpegDecoder() {
   if (m_bInited)
@@ -190,7 +192,7 @@ bool JpegDecoder::InitDecode(bool bAcceptKnownBadHeader) {
   m_bInited = true;
 
   if (setjmp(m_JmpBuf) == -1) {
-    absl::optional<size_t> known_bad_header_offset;
+    std::optional<size_t> known_bad_header_offset;
     if (bAcceptKnownBadHeader) {
       for (size_t offset : kKnownBadHeaderWithInvalidHeightByteOffsetStarts) {
         if (HasKnownBadHeaderWithInvalidHeight(offset)) {
@@ -341,7 +343,7 @@ bool JpegDecoder::HasKnownBadHeaderWithInvalidHeight(
   if (!IsSofSegment(dimension_offset - kSofMarkerByteOffset))
     return false;
 
-  const uint8_t* pHeaderDimensions = &m_SrcSpan[dimension_offset];
+  const auto pHeaderDimensions = m_SrcSpan.subspan(dimension_offset);
   uint8_t nExpectedWidthByte1 = (m_OrigWidth >> 8) & 0xff;
   uint8_t nExpectedWidthByte2 = m_OrigWidth & 0xff;
   // Height high byte, height low byte, width high byte, width low byte.
@@ -351,7 +353,7 @@ bool JpegDecoder::HasKnownBadHeaderWithInvalidHeight(
 }
 
 bool JpegDecoder::IsSofSegment(size_t marker_offset) const {
-  const uint8_t* pHeaderMarker = &m_SrcSpan[marker_offset];
+  const auto pHeaderMarker = m_SrcSpan.subspan(marker_offset);
   return pHeaderMarker[0] == 0xff && pHeaderMarker[1] >= 0xc0 &&
          pHeaderMarker[1] <= 0xcf;
 }
@@ -359,19 +361,21 @@ bool JpegDecoder::IsSofSegment(size_t marker_offset) const {
 void JpegDecoder::PatchUpKnownBadHeaderWithInvalidHeight(
     size_t dimension_offset) {
   DCHECK(m_SrcSpan.size() > dimension_offset + 1u);
-  uint8_t* pData = GetWritableSrcData() + dimension_offset;
+  auto pData = GetWritableSrcData().subspan(dimension_offset);
   pData[0] = (m_OrigHeight >> 8) & 0xff;
   pData[1] = m_OrigHeight & 0xff;
 }
 
 void JpegDecoder::PatchUpTrailer() {
-  uint8_t* pData = GetWritableSrcData();
+  auto pData = GetWritableSrcData();
   pData[m_SrcSpan.size() - 2] = 0xff;
   pData[m_SrcSpan.size() - 1] = 0xd9;
 }
 
-uint8_t* JpegDecoder::GetWritableSrcData() {
-  return const_cast<uint8_t*>(m_SrcSpan.data());
+pdfium::span<uint8_t> JpegDecoder::GetWritableSrcData() {
+  // SAFETY: const_cast<> doesn't change size.
+  return UNSAFE_BUFFERS(pdfium::make_span(
+      const_cast<uint8_t*>(m_SrcSpan.data()), m_SrcSpan.size()));
 }
 
 }  // namespace
@@ -389,21 +393,21 @@ std::unique_ptr<ScanlineDecoder> JpegModule::CreateDecoder(
   if (!pDecoder->Create(src_span, width, height, nComps, ColorTransform))
     return nullptr;
 
-  return std::move(pDecoder);
+  return pDecoder;
 }
 
 // static
-absl::optional<JpegModule::ImageInfo> JpegModule::LoadInfo(
+std::optional<JpegModule::ImageInfo> JpegModule::LoadInfo(
     pdfium::span<const uint8_t> src_span) {
   ImageInfo info;
   if (!JpegLoadInfo(src_span, &info))
-    return absl::nullopt;
+    return std::nullopt;
 
   return info;
 }
 
 #if BUILDFLAG(IS_WIN)
-bool JpegModule::JpegEncode(const RetainPtr<CFX_DIBBase>& pSource,
+bool JpegModule::JpegEncode(const RetainPtr<const CFX_DIBBase>& pSource,
                             uint8_t** dest_buf,
                             size_t* dest_size) {
   jpeg_error_mgr jerr;
@@ -413,15 +417,15 @@ bool JpegModule::JpegEncode(const RetainPtr<CFX_DIBBase>& pSource,
   jerr.format_message = error_do_nothing_char;
   jerr.reset_error_mgr = error_do_nothing;
 
-  jpeg_compress_struct cinfo;
-  memset(&cinfo, 0, sizeof(cinfo));
+  jpeg_compress_struct cinfo = {};  // Aggregate initialization.
+  static_assert(std::is_aggregate_v<decltype(cinfo)>);
   cinfo.err = &jerr;
   jpeg_create_compress(&cinfo);
-  int Bpp = pSource->GetBPP() / 8;
-  uint32_t nComponents = Bpp >= 3 ? 3 : 1;
+  const int bytes_per_pixel = pSource->GetBPP() / 8;
+  uint32_t nComponents = bytes_per_pixel >= 3 ? 3 : 1;
   uint32_t pitch = pSource->GetPitch();
-  uint32_t width = pdfium::base::checked_cast<uint32_t>(pSource->GetWidth());
-  uint32_t height = pdfium::base::checked_cast<uint32_t>(pSource->GetHeight());
+  uint32_t width = pdfium::checked_cast<uint32_t>(pSource->GetWidth());
+  uint32_t height = pdfium::checked_cast<uint32_t>(pSource->GetHeight());
   FX_SAFE_UINT32 safe_buf_len = width;
   safe_buf_len *= height;
   safe_buf_len *= nComponents;
@@ -470,16 +474,20 @@ bool JpegModule::JpegEncode(const RetainPtr<CFX_DIBBase>& pSource,
     if (nComponents > 1) {
       uint8_t* dest_scan = line_buf;
       if (nComponents == 3) {
-        for (uint32_t i = 0; i < width; i++) {
-          ReverseCopy3Bytes(dest_scan, src_scan.data());
-          dest_scan += 3;
-          src_scan = src_scan.subspan(Bpp);
-        }
+        UNSAFE_TODO({
+          for (uint32_t i = 0; i < width; i++) {
+            ReverseCopy3Bytes(dest_scan, src_scan.data());
+            dest_scan += 3;
+            src_scan = src_scan.subspan(bytes_per_pixel);
+          }
+        });
       } else {
-        for (uint32_t i = 0; i < pitch; i++) {
-          *dest_scan++ = ~src_scan.front();
-          src_scan = src_scan.subspan(1);
-        }
+        UNSAFE_TODO({
+          for (uint32_t i = 0; i < pitch; i++) {
+            *dest_scan++ = ~src_scan.front();
+            src_scan = src_scan.subspan(1);
+          }
+        });
       }
       row_pointer[0] = line_buf;
     } else {
@@ -487,14 +495,17 @@ bool JpegModule::JpegEncode(const RetainPtr<CFX_DIBBase>& pSource,
     }
     row = cinfo.next_scanline;
     jpeg_write_scanlines(&cinfo, row_pointer, 1);
-    if (cinfo.next_scanline == row) {
-      constexpr size_t kJpegBlockSize = 1048576;
-      *dest_buf =
-          FX_Realloc(uint8_t, *dest_buf, dest_buf_length + kJpegBlockSize);
-      dest.next_output_byte = *dest_buf + dest_buf_length - dest.free_in_buffer;
-      dest_buf_length += kJpegBlockSize;
-      dest.free_in_buffer += kJpegBlockSize;
-    }
+    UNSAFE_TODO({
+      if (cinfo.next_scanline == row) {
+        constexpr size_t kJpegBlockSize = 1048576;
+        *dest_buf =
+            FX_Realloc(uint8_t, *dest_buf, dest_buf_length + kJpegBlockSize);
+        dest.next_output_byte =
+            *dest_buf + dest_buf_length - dest.free_in_buffer;
+        dest_buf_length += kJpegBlockSize;
+        dest.free_in_buffer += kJpegBlockSize;
+      }
+    });
   }
   jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);

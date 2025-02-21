@@ -18,7 +18,7 @@ class FMExpressionTest : public FXGCUnitTest {};
 class FMCallExpressionTest : public FXGCUnitTest {};
 class FMStringExpressionTest : public FXGCUnitTest {};
 
-TEST_F(FMCallExpressionTest, more_than_32_arguments) {
+TEST_F(FMCallExpressionTest, MoreThan32Arguments) {
   // Use sign as it has 3 object parameters at positions 0, 5, and 6.
   auto* exp = cppgc::MakeGarbageCollected<CXFA_FMIdentifierExpression>(
       heap()->GetAllocationHandle(), L"sign");
@@ -112,10 +112,10 @@ TEST_F(FMExpressionTest, VarExpressionInitNull) {
       heap()->GetAllocationHandle(), L"s", nullptr);
   expr->ToJavaScript(&accumulator,
                      CXFA_FMAssignExpression::ReturnType::kInferred);
-  EXPECT_STREQ(
+  EXPECT_EQ(
       LR"***(var s = "";
 )***",
-      accumulator.MakeString().c_str());
+      accumulator.MakeString());
 }
 
 TEST_F(FMExpressionTest, VarExpressionInitBlank) {
@@ -128,11 +128,11 @@ TEST_F(FMExpressionTest, VarExpressionInitBlank) {
       heap()->GetAllocationHandle(), L"s", init);
   expr->ToJavaScript(&accumulator,
                      CXFA_FMAssignExpression::ReturnType::kInferred);
-  EXPECT_STREQ(
+  EXPECT_EQ(
       LR"***(var s = "";
 s = pfm_rt.var_filter(s);
 )***",
-      accumulator.MakeString().c_str());
+      accumulator.MakeString());
 }
 
 TEST_F(FMExpressionTest, VarExpressionInitString) {
@@ -145,11 +145,11 @@ TEST_F(FMExpressionTest, VarExpressionInitString) {
       heap()->GetAllocationHandle(), L"s", init);
   expr->ToJavaScript(&accumulator,
                      CXFA_FMAssignExpression::ReturnType::kInferred);
-  EXPECT_STREQ(
+  EXPECT_EQ(
       LR"***(var s = "foo";
 s = pfm_rt.var_filter(s);
 )***",
-      accumulator.MakeString().c_str());
+      accumulator.MakeString());
 }
 
 TEST_F(FMExpressionTest, VarExpressionInitNumeric) {
@@ -162,9 +162,9 @@ TEST_F(FMExpressionTest, VarExpressionInitNumeric) {
       heap()->GetAllocationHandle(), L"s", init);
   expr->ToJavaScript(&accumulator,
                      CXFA_FMAssignExpression::ReturnType::kInferred);
-  EXPECT_STREQ(
+  EXPECT_EQ(
       LR"***(var s = 112;
 s = pfm_rt.var_filter(s);
 )***",
-      accumulator.MakeString().c_str());
+      accumulator.MakeString());
 }

@@ -7,8 +7,8 @@
 #include "fxjs/cjs_color.h"
 
 #include <algorithm>
-#include <vector>
 
+#include "core/fxcrt/span.h"
 #include "core/fxge/cfx_color.h"
 #include "fxjs/cjs_event_context.h"
 #include "fxjs/cjs_object.h"
@@ -270,7 +270,7 @@ CJS_Result CJS_Color::SetPropertyHelper(CJS_Runtime* pRuntime,
 }
 
 CJS_Result CJS_Color::convert(CJS_Runtime* pRuntime,
-                              const std::vector<v8::Local<v8::Value>>& params) {
+                              pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() < 2)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -299,7 +299,7 @@ CJS_Result CJS_Color::convert(CJS_Runtime* pRuntime,
 }
 
 CJS_Result CJS_Color::equal(CJS_Runtime* pRuntime,
-                            const std::vector<v8::Local<v8::Value>>& params) {
+                            pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() < 2)
     return CJS_Result::Failure(JSMessage::kParamError);
 

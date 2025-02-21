@@ -15,9 +15,9 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_name.h"
 #include "core/fxcrt/fx_codepage.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/freetype/fx_freetype.h"
 #include "core/fxge/fx_font.h"
-#include "third_party/base/numerics/safe_math.h"
 
 namespace {
 
@@ -37,10 +37,9 @@ void GetPredefinedEncoding(const ByteString& value, FontEncoding* basemap) {
 CPDF_SimpleFont::CPDF_SimpleFont(CPDF_Document* pDocument,
                                  RetainPtr<CPDF_Dictionary> pFontDict)
     : CPDF_Font(pDocument, std::move(pFontDict)) {
-  memset(m_CharWidth, 0xff, sizeof(m_CharWidth));
-  memset(m_GlyphIndex, 0xff, sizeof(m_GlyphIndex));
-  for (size_t i = 0; i < std::size(m_CharBBox); ++i)
-    m_CharBBox[i] = FX_RECT(-1, -1, -1, -1);
+  m_CharWidth.fill(0xffff);
+  m_GlyphIndex.fill(0xffff);
+  m_CharBBox.fill(FX_RECT(-1, -1, -1, -1));
 }
 
 CPDF_SimpleFont::~CPDF_SimpleFont() = default;
@@ -77,22 +76,23 @@ void CPDF_SimpleFont::LoadCharMetrics(int charcode) {
     }
     return;
   }
-  FXFT_FaceRec* face = m_Font.GetFaceRec();
+  RetainPtr<CFX_Face> face = m_Font.GetFace();
+  if (!face) {
+    return;
+  }
+
+  FXFT_FaceRec* face_rec = face->GetRec();
   int err =
-      FT_Load_Glyph(face, glyph_index,
+      FT_Load_Glyph(face_rec, glyph_index,
                     FT_LOAD_NO_SCALE | FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH);
   if (err)
     return;
 
-  FT_Pos iHoriBearingX = FXFT_Get_Glyph_HoriBearingX(face);
-  FT_Pos iHoriBearingY = FXFT_Get_Glyph_HoriBearingY(face);
-  m_CharBBox[charcode] =
-      FX_RECT(TT2PDF(iHoriBearingX, face), TT2PDF(iHoriBearingY, face),
-              TT2PDF(iHoriBearingX + FXFT_Get_Glyph_Width(face), face),
-              TT2PDF(iHoriBearingY - FXFT_Get_Glyph_Height(face), face));
+  m_CharBBox[charcode] = face->GetGlyphBBox();
 
   if (m_bUseFontWidth) {
-    int TT_Width = TT2PDF(FXFT_Get_Glyph_HoriAdvance(face), face);
+    int TT_Width = NormalizeFontMetric(FXFT_Get_Glyph_HoriAdvance(face_rec),
+                                       face->GetUnitsPerEm());
     if (m_CharWidth[charcode] == 0xffff) {
       m_CharWidth[charcode] = TT_Width;
     } else if (TT_Width && !IsEmbedded()) {
@@ -227,8 +227,9 @@ bool CPDF_SimpleFont::LoadCommon() {
     LoadFontDescriptor(pFontDesc.Get());
   LoadCharWidths(pFontDesc.Get());
   if (m_pFontFile) {
-    if (m_BaseFontName.GetLength() > 8 && m_BaseFontName[7] == '+')
-      m_BaseFontName = m_BaseFontName.Last(m_BaseFontName.GetLength() - 8);
+    if (m_BaseFontName.GetLength() > 7 && m_BaseFontName[6] == '+') {
+      m_BaseFontName = m_BaseFontName.Last(m_BaseFontName.GetLength() - 7);
+    }
   } else {
     LoadSubstFont();
   }
@@ -237,18 +238,19 @@ bool CPDF_SimpleFont::LoadCommon() {
   LoadPDFEncoding(!!m_pFontFile, m_Font.IsTTFont());
   LoadGlyphMap();
   m_CharNames.clear();
-  if (!m_Font.GetFaceRec())
+  if (!HasFace()) {
     return true;
+  }
 
   if (FontStyleIsAllCaps(m_Flags)) {
-    static const unsigned char kLowercases[][2] = {
-        {'a', 'z'}, {0xe0, 0xf6}, {0xf8, 0xfd}};
-    for (size_t range = 0; range < std::size(kLowercases); ++range) {
-      const auto& lower = kLowercases[range];
-      for (int i = lower[0]; i <= lower[1]; ++i) {
-        if (m_GlyphIndex[i] != 0xffff && m_pFontFile)
+    static const auto kLowercases =
+        fxcrt::ToArray<std::pair<const uint8_t, const uint8_t>>(
+            {{'a', 'z'}, {0xe0, 0xf6}, {0xf8, 0xfd}});
+    for (const auto& lower : kLowercases) {
+      for (int i = lower.first; i <= lower.second; ++i) {
+        if (m_GlyphIndex[i] != 0xffff && m_pFontFile) {
           continue;
-
+        }
         int j = i - 32;
         m_GlyphIndex[i] = m_GlyphIndex[j];
         if (m_CharWidth[j]) {

@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/base/check.h"
 #include "v8/include/cppgc/visitor.h"
 #include "xfa/fwl/cfwl_listbox.h"
 #include "xfa/fwl/cfwl_notedriver.h"
@@ -162,8 +162,7 @@ bool CXFA_FFListBox::UpdateFWLData() {
 }
 
 void CXFA_FFListBox::OnSelectChanged(CFWL_Widget* pWidget) {
-  CXFA_EventParam eParam;
-  eParam.m_eType = XFA_EVENT_Change;
+  CXFA_EventParam eParam(XFA_EVENT_Change);
   eParam.m_wsPrevText = m_pNode->GetValue(XFA_ValuePicture::kRaw);
   m_pNode->ProcessEvent(GetDocView(), XFA_AttributeValue::Change, &eParam);
 }

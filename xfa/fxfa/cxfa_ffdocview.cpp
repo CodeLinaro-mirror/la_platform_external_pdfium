@@ -9,14 +9,14 @@
 #include <set>
 #include <utility>
 
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/xml/cfx_xmlparser.h"
 #include "fxjs/gc/container_trace.h"
 #include "fxjs/xfa/cfxjse_engine.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/contains.h"
 #include "xfa/fxfa/cxfa_ffapp.h"
 #include "xfa/fxfa/cxfa_ffbarcode.h"
 #include "xfa/fxfa/cxfa_ffcheckbutton.h"
@@ -57,9 +57,7 @@ bool IsValidXMLNameString(const WideString& str) {
   return true;
 }
 
-}  // namespace
-
-const XFA_AttributeValue kXFAEventActivity[] = {
+const XFA_AttributeValue kXFAEventActivityData[] = {
     XFA_AttributeValue::Click,      XFA_AttributeValue::Change,
     XFA_AttributeValue::DocClose,   XFA_AttributeValue::DocReady,
     XFA_AttributeValue::Enter,      XFA_AttributeValue::Exit,
@@ -75,6 +73,11 @@ const XFA_AttributeValue kXFAEventActivity[] = {
     XFA_AttributeValue::PreSubmit,  XFA_AttributeValue::Ready,
     XFA_AttributeValue::Unknown,
 };
+
+}  // namespace
+
+const pdfium::span<const XFA_AttributeValue> kXFAEventActivity{
+    kXFAEventActivityData};
 
 CXFA_FFDocView::UpdateScope::UpdateScope(CXFA_FFDocView* pDocView)
     : m_pDocView(pDocView) {
@@ -189,17 +192,17 @@ void CXFA_FFDocView::ShowNullTestMsg() {
   CXFA_FFApp* pApp = m_pDoc->GetApp();
   CXFA_FFApp::CallbackIface* pAppProvider = pApp->GetAppProvider();
   if (pAppProvider && iCount) {
-    int32_t iRemain = iCount > 7 ? iCount - 7 : 0;
-    iCount -= iRemain;
+    int32_t remaining = iCount > 7 ? iCount - 7 : 0;
+    iCount -= remaining;
     WideString wsMsg;
     for (int32_t i = 0; i < iCount; i++)
       wsMsg += m_NullTestMsgArray[i] + L"\n";
 
-    if (iRemain > 0) {
+    if (remaining > 0) {
       wsMsg += L"\n" + WideString::Format(
                            L"Message limit exceeded. Remaining %d "
                            L"validation errors not reported.",
-                           iRemain);
+                           remaining);
     }
     pAppProvider->MsgBox(wsMsg, pAppProvider->GetAppTitle(),
                          static_cast<uint32_t>(AlertIcon::kStatus),
@@ -427,8 +430,7 @@ XFA_EventError CXFA_FFDocView::ExecEventActivityByDeepFirst(
     if (!pFormNode->IsWidgetReady())
       return XFA_EventError::kNotExist;
 
-    CXFA_EventParam eParam;
-    eParam.m_eType = eEventType;
+    CXFA_EventParam eParam(eEventType);
     eParam.m_bIsFormReady = bIsFormReady;
     return XFA_ProcessEvent(this, pFormNode, &eParam);
   }
@@ -449,8 +451,7 @@ XFA_EventError CXFA_FFDocView::ExecEventActivityByDeepFirst(
   if (!pFormNode->IsWidgetReady())
     return iRet;
 
-  CXFA_EventParam eParam;
-  eParam.m_eType = eEventType;
+  CXFA_EventParam eParam(eEventType);
   eParam.m_bIsFormReady = bIsFormReady;
 
   XFA_EventErrorAccumulate(&iRet, XFA_ProcessEvent(this, pFormNode, &eParam));
@@ -469,7 +470,7 @@ CXFA_FFWidget* CXFA_FFDocView::GetWidgetByName(const WideString& wsName,
     pRefNode = node->IsWidgetReady() ? node : nullptr;
   }
   WideString wsExpression = (!pRefNode ? L"$form." : L"") + wsName;
-  absl::optional<CFXJSE_Engine::ResolveResult> maybeResult =
+  std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
       pScriptContext->ResolveObjects(
           pRefNode, wsExpression.AsStringView(),
           Mask<XFA_ResolveFlag>{
@@ -525,8 +526,7 @@ void CXFA_FFDocView::RunSubformIndexChange() {
     if (!bInserted || !pSubformNode->IsWidgetReady())
       continue;
 
-    CXFA_EventParam eParam;
-    eParam.m_eType = XFA_EVENT_IndexChange;
+    CXFA_EventParam eParam(XFA_EVENT_IndexChange);
     pSubformNode->ProcessEvent(this, XFA_AttributeValue::IndexChange, &eParam);
   }
 }
@@ -664,7 +664,7 @@ void CXFA_FFDocView::RunBindItems() {
     CFXJSE_Engine* pScriptContext =
         pWidgetNode->GetDocument()->GetScriptContext();
     WideString wsRef = item->GetRef();
-    absl::optional<CFXJSE_Engine::ResolveResult> maybeRS =
+    std::optional<CFXJSE_Engine::ResolveResult> maybeRS =
         pScriptContext->ResolveObjects(
             pWidgetNode, wsRef.AsStringView(),
             Mask<XFA_ResolveFlag>{

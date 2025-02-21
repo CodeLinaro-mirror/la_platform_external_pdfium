@@ -71,8 +71,7 @@ BlendMode GetBlendTypeInternal(const ByteString& mode) {
 
 CPDF_GeneralState::CPDF_GeneralState() = default;
 
-CPDF_GeneralState::CPDF_GeneralState(const CPDF_GeneralState& that)
-    : m_Ref(that.m_Ref) {}
+CPDF_GeneralState::CPDF_GeneralState(const CPDF_GeneralState& that) = default;
 
 CPDF_GeneralState::~CPDF_GeneralState() = default;
 
@@ -124,7 +123,9 @@ BlendMode CPDF_GeneralState::GetBlendType() const {
 }
 
 void CPDF_GeneralState::SetBlendType(BlendMode type) {
-  m_Ref.GetPrivateCopy()->m_BlendType = type;
+  if (GetBlendType() != type) {
+    m_Ref.GetPrivateCopy()->m_BlendType = type;
+  }
 }
 
 float CPDF_GeneralState::GetFillAlpha() const {
@@ -133,7 +134,9 @@ float CPDF_GeneralState::GetFillAlpha() const {
 }
 
 void CPDF_GeneralState::SetFillAlpha(float alpha) {
-  m_Ref.GetPrivateCopy()->m_FillAlpha = alpha;
+  if (GetFillAlpha() != alpha) {
+    m_Ref.GetPrivateCopy()->m_FillAlpha = alpha;
+  }
 }
 
 float CPDF_GeneralState::GetStrokeAlpha() const {
@@ -142,7 +145,9 @@ float CPDF_GeneralState::GetStrokeAlpha() const {
 }
 
 void CPDF_GeneralState::SetStrokeAlpha(float alpha) {
-  m_Ref.GetPrivateCopy()->m_StrokeAlpha = alpha;
+  if (GetStrokeAlpha() != alpha) {
+    m_Ref.GetPrivateCopy()->m_StrokeAlpha = alpha;
+  }
 }
 
 RetainPtr<const CPDF_Dictionary> CPDF_GeneralState::GetSoftMask() const {
@@ -255,16 +260,8 @@ void CPDF_GeneralState::SetTextKnockout(bool knockout) {
   m_Ref.GetPrivateCopy()->m_TextKnockout = knockout;
 }
 
-void CPDF_GeneralState::SetMatrix(const CFX_Matrix& matrix) {
-  m_Ref.GetPrivateCopy()->m_Matrix = matrix;
-}
-
-CFX_Matrix* CPDF_GeneralState::GetMutableMatrix() {
-  return &m_Ref.GetPrivateCopy()->m_Matrix;
-}
-
 void CPDF_GeneralState::SetGraphicsResourceNames(
-  std::vector<ByteString> names) {
+    std::vector<ByteString> names) {
   m_Ref.GetPrivateCopy()->m_GraphicsResourceNames = std::move(names);
 }
 
@@ -273,7 +270,7 @@ void CPDF_GeneralState::AppendGraphicsResourceName(ByteString name) {
 }
 
 pdfium::span<const ByteString> CPDF_GeneralState::GetGraphicsResourceNames()
-  const {
+    const {
   const StateData* data = m_Ref.GetObject();
   if (!data) {
     return {};
@@ -292,7 +289,6 @@ CPDF_GeneralState::StateData::StateData(const StateData& that)
       m_FillAlpha(that.m_FillAlpha),
       m_pTR(that.m_pTR),
       m_pTransferFunc(that.m_pTransferFunc),
-      m_Matrix(that.m_Matrix),
       m_RenderIntent(that.m_RenderIntent),
       m_StrokeAdjust(that.m_StrokeAdjust),
       m_AlphaSource(that.m_AlphaSource),

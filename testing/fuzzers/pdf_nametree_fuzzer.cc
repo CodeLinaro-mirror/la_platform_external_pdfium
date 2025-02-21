@@ -11,7 +11,7 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_object.h"
 #include "core/fpdfdoc/cpdf_nametree.h"
-#include "third_party/base/containers/span.h"
+#include "core/fxcrt/span.h"
 
 struct Params {
   bool delete_backwards;
@@ -27,9 +27,7 @@ std::vector<WideString> GetNames(uint8_t count,
     // The name is not that interesting here. Keep it short.
     constexpr size_t kMaxNameLen = 10;
     std::string str = data_provider->ConsumeRandomLengthString(kMaxNameLen);
-    names.push_back(WideString::FromUTF16LE(
-        reinterpret_cast<const unsigned short*>(str.data()),
-        str.size() / sizeof(unsigned short)));
+    names.push_back(WideString::FromUTF16LE(pdfium::as_byte_span(str)));
   }
   return names;
 }

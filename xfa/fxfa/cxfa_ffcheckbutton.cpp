@@ -6,7 +6,7 @@
 
 #include "xfa/fxfa/cxfa_ffcheckbutton.h"
 
-#include "third_party/base/check.h"
+#include "core/fxcrt/check.h"
 #include "v8/include/cppgc/visitor.h"
 #include "xfa/fwl/cfwl_checkbox.h"
 #include "xfa/fwl/cfwl_messagemouse.h"
@@ -310,10 +310,8 @@ void CXFA_FFCheckButton::OnProcessEvent(CFWL_Event* pEvent) {
   CXFA_FFField::OnProcessEvent(pEvent);
   switch (pEvent->GetType()) {
     case CFWL_Event::Type::CheckStateChanged: {
-      CXFA_EventParam eParam;
-      eParam.m_eType = XFA_EVENT_Change;
+      CXFA_EventParam eParam(XFA_EVENT_Change);
       eParam.m_wsPrevText = m_pNode->GetValue(XFA_ValuePicture::kRaw);
-
       CXFA_Node* exclNode = m_pNode->GetExclGroupIfExists();
       if (ProcessCommittedData()) {
         if (exclNode) {

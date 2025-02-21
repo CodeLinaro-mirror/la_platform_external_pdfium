@@ -9,7 +9,10 @@
 #include <set>
 #include <utility>
 
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/xml/cfx_xmldocument.h"
 #include "core/fxcrt/xml/cfx_xmlelement.h"
@@ -17,9 +20,6 @@
 #include "fxjs/xfa/cfxjse_engine.h"
 #include "fxjs/xfa/cfxjse_resolveprocessor.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/notreached.h"
 #include "xfa/fxfa/cxfa_ffdoc.h"
 #include "xfa/fxfa/cxfa_ffnotify.h"
 #include "xfa/fxfa/parser/cscript_datawindow.h"
@@ -106,7 +106,7 @@ void FormValueNode_SetChildContent(CXFA_Node* pValueNode,
       if (!pContentRawDataNode) {
         XFA_Element element = XFA_Element::Sharptext;
         if (pChildNode->GetElementType() == XFA_Element::ExData) {
-          absl::optional<WideString> contentType =
+          std::optional<WideString> contentType =
               pChildNode->JSObject()->TryAttribute(XFA_Attribute::ContentType,
                                                    false);
           if (contentType.has_value()) {
@@ -352,7 +352,7 @@ CXFA_Node* FindDataRefDataNode(CXFA_Document* pDocument,
     dwFlags |= XFA_ResolveFlag::kParent;
     dwFlags |= XFA_ResolveFlag::kSiblings;
   }
-  absl::optional<CFXJSE_Engine::ResolveResult> maybeResult =
+  std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
       pDocument->GetScriptContext()->ResolveObjectsWithBindNode(
           pDataScope, wsRef.AsStringView(), dwFlags, pTemplateNode);
   if (!maybeResult.has_value())
@@ -413,10 +413,7 @@ CXFA_Node* FindMatchingDataNode(
     CXFA_Occur* pTemplateNodeOccur =
         pCurTemplateNode->GetFirstChildByClass<CXFA_Occur>(XFA_Element::Occur);
     if (pTemplateNodeOccur) {
-      int32_t iMin;
-      int32_t iMax;
-      int32_t iInit;
-      std::tie(iMin, iMax, iInit) = pTemplateNodeOccur->GetOccurInfo();
+      auto [iMin, iMax, iInit] = pTemplateNodeOccur->GetOccurInfo();
       if (iMax == 0) {
         pCurTemplateNode = pIterator->MoveToNext();
         continue;
@@ -752,7 +749,7 @@ CXFA_Node* MaybeCreateDataNode(CXFA_Document* pDocument,
       if (pDDGroupNode->GetElementType() != XFA_Element::DataGroup)
         continue;
 
-      absl::optional<WideString> ns = pDDGroupNode->JSObject()->TryNamespace();
+      std::optional<WideString> ns = pDDGroupNode->JSObject()->TryNamespace();
       if (!ns.has_value() ||
           !ns.value().EqualsASCII("http://ns.adobe.com/data-description/")) {
         continue;
@@ -1092,6 +1089,9 @@ CXFA_Node* CopyContainer_SubformSet(CXFA_Document* pDocument,
     bool bFound = false;
     for (CXFA_Node* pTemplateChild = pTemplateNode->GetFirstChild();
          pTemplateChild; pTemplateChild = pTemplateChild->GetNextSibling()) {
+      if (pTemplateChild->GetPacketType() != XFA_PacketType::Template) {
+        continue;
+      }
       if (XFA_DataMerge_NeedGenerateForm(pTemplateChild, bUseInstanceManager)) {
         XFA_NodeMerge_CloneOrMergeContainer(pDocument, pSubformSetNode,
                                             pTemplateChild, true, nullptr);
@@ -1201,7 +1201,7 @@ void UpdateBindingRelations(CXFA_Document* pDocument,
                   : WideString();
           const Mask<XFA_ResolveFlag> kFlags = {XFA_ResolveFlag::kChildren,
                                                 XFA_ResolveFlag::kCreateNode};
-          absl::optional<CFXJSE_Engine::ResolveResult> maybeResult =
+          std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
               pDocument->GetScriptContext()->ResolveObjectsWithBindNode(
                   pDataScope, wsRef.AsStringView(), kFlags, pTemplateNode);
           CXFA_Object* pObject =
@@ -1259,8 +1259,7 @@ void UpdateDataRelation(CXFA_Node* pDataNode, CXFA_Node* pDataDescriptionNode) {
         if (pDDGroupNode->GetElementType() != XFA_Element::DataGroup)
           continue;
 
-        absl::optional<WideString> ns =
-            pDDGroupNode->JSObject()->TryNamespace();
+        std::optional<WideString> ns = pDDGroupNode->JSObject()->TryNamespace();
         if (!ns.has_value() ||
             !ns.value().EqualsASCII("http://ns.adobe.com/data-description/")) {
           continue;
@@ -1289,7 +1288,7 @@ CXFA_Document::CXFA_Document(CXFA_FFNotify* notify,
       notify_(notify),
       node_owner_(cppgc::MakeGarbageCollected<CXFA_NodeOwner>(
           heap->GetAllocationHandle())),
-      m_pLayoutProcessor(std::move(pLayout)) {
+      m_pLayoutProcessor(pLayout) {
   if (m_pLayoutProcessor)
     m_pLayoutProcessor->SetDocument(this);
 }
@@ -1341,12 +1340,12 @@ CXFA_Object* CXFA_Document::GetXFAObject(XFA_HashCode dwNodeNameHash) {
         if (pDatasetsChild->GetNameHash() != XFA_HASHCODE_Data)
           continue;
 
-        absl::optional<WideString> namespaceURI =
+        std::optional<WideString> namespaceURI =
             pDatasetsChild->JSObject()->TryNamespace();
         if (!namespaceURI.has_value())
           continue;
 
-        absl::optional<WideString> datasetsURI =
+        std::optional<WideString> datasetsURI =
             pDatasetsNode->JSObject()->TryNamespace();
         if (!datasetsURI.has_value())
           continue;
@@ -1561,7 +1560,7 @@ void CXFA_Document::DoProtoMerge() {
 
     CXFA_Node* pProtoNode = nullptr;
     if (!wsSOM.IsEmpty()) {
-      absl::optional<CFXJSE_Engine::ResolveResult> maybeResult =
+      std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
           m_pScriptContext->ResolveObjects(
               pUseHrefNode, wsSOM,
               Mask<XFA_ResolveFlag>{
@@ -1630,7 +1629,7 @@ CXFA_Node* CXFA_Document::DataMerge_CopyContainer(CXFA_Node* pTemplateNode,
                                                   bool bOneInstance,
                                                   bool bDataMerge,
                                                   bool bUpLevel) {
-  DCHECK(pTemplateNode->IsContainerNode());
+  CHECK(pTemplateNode->IsContainerNode());
   switch (pTemplateNode->GetElementType()) {
     case XFA_Element::Area:
     case XFA_Element::PageArea:
@@ -1701,7 +1700,7 @@ void CXFA_Document::DoDataMerge() {
       continue;
 
     if (!pDDRoot && pChildNode->GetNameHash() == XFA_HASHCODE_DataDescription) {
-      absl::optional<WideString> namespaceURI =
+      std::optional<WideString> namespaceURI =
           pChildNode->JSObject()->TryNamespace();
       if (!namespaceURI.has_value())
         continue;
@@ -1710,7 +1709,7 @@ void CXFA_Document::DoDataMerge() {
         pDDRoot = pChildNode;
       }
     } else if (!pDataRoot && pChildNode->GetNameHash() == XFA_HASHCODE_Data) {
-      absl::optional<WideString> namespaceURI =
+      std::optional<WideString> namespaceURI =
           pChildNode->JSObject()->TryNamespace();
       if (!namespaceURI.has_value())
         continue;

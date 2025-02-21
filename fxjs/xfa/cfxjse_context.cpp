@@ -8,6 +8,9 @@
 
 #include <utility>
 
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/ptr_util.h"
 #include "fxjs/cfxjs_engine.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/xfa/cfxjse_class.h"
@@ -15,9 +18,6 @@
 #include "fxjs/xfa/cfxjse_runtimedata.h"
 #include "fxjs/xfa/cfxjse_value.h"
 #include "fxjs/xfa/cjx_object.h"
-#include "third_party/base/check.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/memory/ptr_util.h"
 #include "v8/include/v8-exception.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-message.h"
@@ -195,8 +195,8 @@ std::unique_ptr<CFXJSE_Context> CFXJSE_Context::Create(
   v8::Local<v8::Object> pThis = pThisProxy->GetPrototype().As<v8::Object>();
   FXJSE_UpdateObjectBinding(pThis, pGlobalObject);
 
-  v8::Local<v8::Context> hRootContext = v8::Local<v8::Context>::New(
-      pIsolate, CFXJSE_RuntimeData::Get(pIsolate)->GetRootContext());
+  v8::Local<v8::Context> hRootContext =
+      CFXJSE_RuntimeData::Get(pIsolate)->GetRootContext(pIsolate);
   hNewContext->SetSecurityToken(hRootContext->GetSecurityToken());
   pContext->m_hContext.Reset(pIsolate, hNewContext);
   return pContext;
@@ -235,13 +235,13 @@ CFXJSE_Class* CFXJSE_Context::GetClassByName(ByteStringView szName) const {
 }
 
 void CFXJSE_Context::EnableCompatibleMode() {
-  ExecuteScript(szCompatibleModeScript, nullptr, v8::Local<v8::Object>());
-  ExecuteScript(szConsoleScript, nullptr, v8::Local<v8::Object>());
+  ExecuteScript(szCompatibleModeScript, v8::Local<v8::Object>());
+  ExecuteScript(szConsoleScript, v8::Local<v8::Object>());
 }
 
-bool CFXJSE_Context::ExecuteScript(ByteStringView bsScript,
-                                   CFXJSE_Value* pRetValue,
-                                   v8::Local<v8::Object> hNewThis) {
+CFXJSE_Context::ExecutionResult CFXJSE_Context::ExecuteScript(
+    ByteStringView bsScript,
+    v8::Local<v8::Object> hNewThis) {
   CFXJSE_ScopeUtil_IsolateHandleContext scope(this);
   v8::Local<v8::Context> hContext = GetIsolate()->GetCurrentContext();
   v8::TryCatch trycatch(GetIsolate());
@@ -254,16 +254,13 @@ bool CFXJSE_Context::ExecuteScript(ByteStringView bsScript,
       v8::Local<v8::Value> hValue;
       if (hScript->Run(hContext).ToLocal(&hValue)) {
         CHECK(!trycatch.HasCaught());
-        if (pRetValue)
-          pRetValue->ForceSetValue(GetIsolate(), hValue);
-        return true;
+        return ExecutionResult(
+            true, std::make_unique<CFXJSE_Value>(GetIsolate(), hValue));
       }
     }
-    if (pRetValue) {
-      pRetValue->ForceSetValue(GetIsolate(),
-                               CreateReturnValue(GetIsolate(), &trycatch));
-    }
-    return false;
+    return ExecutionResult(
+        false, std::make_unique<CFXJSE_Value>(
+                   GetIsolate(), CreateReturnValue(GetIsolate(), &trycatch)));
   }
 
   v8::Local<v8::String> hEval = fxv8::NewStringHelper(
@@ -279,9 +276,8 @@ bool CFXJSE_Context::ExecuteScript(ByteStringView bsScript,
     v8::Local<v8::Value> hValue;
     if (hWrapperFn->Call(hContext, hNewThis, 1, rgArgs).ToLocal(&hValue)) {
       DCHECK(!trycatch.HasCaught());
-      if (pRetValue)
-        pRetValue->ForceSetValue(GetIsolate(), hValue);
-      return true;
+      return ExecutionResult(
+          true, std::make_unique<CFXJSE_Value>(GetIsolate(), hValue));
     }
   }
 
@@ -299,9 +295,22 @@ bool CFXJSE_Context::ExecuteScript(ByteStringView bsScript,
   }
 #endif  // NDEBUG
 
-  if (pRetValue) {
-    pRetValue->ForceSetValue(GetIsolate(),
-                             CreateReturnValue(GetIsolate(), &trycatch));
-  }
-  return false;
+  return ExecutionResult(
+      false, std::make_unique<CFXJSE_Value>(
+                 GetIsolate(), CreateReturnValue(GetIsolate(), &trycatch)));
 }
+
+CFXJSE_Context::ExecutionResult::ExecutionResult() = default;
+
+CFXJSE_Context::ExecutionResult::ExecutionResult(
+    bool sts,
+    std::unique_ptr<CFXJSE_Value> val)
+    : status(sts), value(std::move(val)) {}
+
+CFXJSE_Context::ExecutionResult::ExecutionResult(
+    ExecutionResult&& that) noexcept = default;
+
+CFXJSE_Context::ExecutionResult& CFXJSE_Context::ExecutionResult::operator=(
+    ExecutionResult&& that) noexcept = default;
+
+CFXJSE_Context::ExecutionResult::~ExecutionResult() = default;
