@@ -16,7 +16,6 @@
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
-#include "third_party/base/containers/span.h"
 #include "xfa/fgas/graphics/cfgas_gecolor.h"
 
 class CFGAS_GEPath;
@@ -44,7 +43,8 @@ class CFGAS_GEGraphics {
   CFX_RenderDevice* GetRenderDevice();
 
   void SetLineCap(CFX_GraphStateData::LineCap lineCap);
-  void SetLineDash(float dashPhase, pdfium::span<const float> dashArray);
+  // Dash phase is always set to 0.
+  void SetLineDash(std::vector<float> dash_array);
   void SetSolidLineDash();
   void SetLineWidth(float lineWidth);
   void EnableActOnDash();

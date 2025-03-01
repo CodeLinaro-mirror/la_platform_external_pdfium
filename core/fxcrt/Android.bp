@@ -40,5 +40,6 @@ cc_library_static {
     srcs: [
         "*.cpp",
         "xml/*.cpp",
+        "debug/*.cc"
     ],
 }

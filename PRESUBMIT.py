@@ -63,7 +63,7 @@ _BANNED_CPP_FUNCTIONS = (
         [_THIRD_PARTY],
     ),
     (
-        r'/v8::Isolate::(?:|Try)GetCurrent()',
+        r'/v8::Isolate::(?:|Try)GetCurrent\(\)',
         (
             'v8::Isolate::GetCurrent() and v8::Isolate::TryGetCurrent() are',
             'banned. Hold a pointer to the v8::Isolate that was entered. Use',
@@ -72,6 +72,30 @@ _BANNED_CPP_FUNCTIONS = (
         ),
         True,
         (),
+    ),
+    (
+        r'/\bmemcpy\(',
+        ('Use FXSYS_memcpy() in place of memcpy().',),
+        True,
+        [_THIRD_PARTY],
+    ),
+    (
+        r'/\bmemmove\(',
+        ('Use FXSYS_memmove() in place of memmove().',),
+        True,
+        [_THIRD_PARTY],
+    ),
+    (
+        r'/\bmemset\(',
+        ('Use FXSYS_memset() in place of memset().',),
+        True,
+        [_THIRD_PARTY],
+    ),
+    (
+        r'/\bmemclr\(',
+        ('Use FXSYS_memclr() in place of memclr().',),
+        True,
+        [_THIRD_PARTY],
     ),
 )
 
@@ -428,12 +452,12 @@ def _CheckPngNames(input_api, output_api):
   """Checks that .png files have the right file name format, which must be in
   the form:
 
-  NAME_expected(_(agg|gdi|skia))?(_(linux|mac|win))?.pdf.\d+.png
+  NAME_expected(_gdi)?(_(agg|skia))?(_(linux|mac|win))?.pdf.\d+.png
 
   This must be the same format as the one in testing/corpus's PRESUBMIT.py.
   """
   expected_pattern = input_api.re.compile(
-      r'.+_expected(_(agg|gdi|skia))?(_(linux|mac|win))?\.pdf\.\d+.png')
+      r'.+_expected(_gdi)?(_(agg|skia))?(_(linux|mac|win))?\.pdf\.\d+.png')
   results = []
   for f in input_api.AffectedFiles(include_deletes=False):
     if not f.LocalPath().endswith('.png'):
@@ -499,6 +523,7 @@ def ChecksCommon(input_api, output_api):
   results.extend(
       input_api.canned_checks.PanProjectChecks(
           input_api, output_api, project_name='PDFium'))
+  results.extend(_CheckUnwantedDependencies(input_api, output_api))
 
   # PanProjectChecks() doesn't consider .gn/.gni files, so check those, too.
   files_to_check = (
@@ -512,6 +537,8 @@ def ChecksCommon(input_api, output_api):
           project_name='PDFium',
           source_file_filter=lambda x: input_api.FilterSourceFile(
               x, files_to_check=files_to_check)))
+  results.extend(
+      input_api.canned_checks.CheckInclusiveLanguage(input_api, output_api))
 
   return results
 
@@ -519,7 +546,6 @@ def ChecksCommon(input_api, output_api):
 def CheckChangeOnUpload(input_api, output_api):
   results = []
   results.extend(_CheckNoBannedFunctions(input_api, output_api))
-  results.extend(_CheckUnwantedDependencies(input_api, output_api))
   results.extend(
       input_api.canned_checks.CheckPatchFormatted(input_api, output_api))
   results.extend(

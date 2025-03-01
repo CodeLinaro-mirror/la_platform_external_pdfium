@@ -8,10 +8,10 @@
 
 #include <utility>
 
+#include "core/fxcrt/check_op.h"
 #include "fxjs/cfxjs_engine.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/xfa/cfxjse_isolatetracker.h"
-#include "third_party/base/check_op.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-external.h"
 #include "v8/include/v8-isolate.h"
@@ -36,7 +36,7 @@ std::unique_ptr<CFXJSE_RuntimeData> CFXJSE_RuntimeData::Create(
                        fxv8::NewStringHelper(pIsolate, "global"));
 
   v8::Local<v8::Context> hContext =
-      v8::Context::New(pIsolate, 0, hGlobalTemplate);
+      v8::Context::New(pIsolate, nullptr, hGlobalTemplate);
 
   DCHECK_EQ(hContext->Global()->InternalFieldCount(), 0);
   DCHECK_EQ(
@@ -44,15 +44,20 @@ std::unique_ptr<CFXJSE_RuntimeData> CFXJSE_RuntimeData::Create(
       0);
 
   hContext->SetSecurityToken(v8::External::New(pIsolate, pIsolate));
-  pRuntimeData->m_hRootContextGlobalTemplate.Reset(pIsolate, hFuncTemplate);
-  pRuntimeData->m_hRootContext.Reset(pIsolate, hContext);
+  pRuntimeData->root_context_global_template_.Reset(pIsolate, hFuncTemplate);
+  pRuntimeData->root_context_.Reset(pIsolate, hContext);
   return pRuntimeData;
 }
 
 CFXJSE_RuntimeData* CFXJSE_RuntimeData::Get(v8::Isolate* pIsolate) {
-  FXJS_PerIsolateData::SetUp(pIsolate);
-  FXJS_PerIsolateData* pData = FXJS_PerIsolateData::Get(pIsolate);
+  CFXJS_PerIsolateData::SetUp(pIsolate);
+  CFXJS_PerIsolateData* pData = CFXJS_PerIsolateData::Get(pIsolate);
   if (!pData->GetExtension())
     pData->SetExtension(CFXJSE_RuntimeData::Create(pIsolate));
   return static_cast<CFXJSE_RuntimeData*>(pData->GetExtension());
+}
+
+v8::Local<v8::Context> CFXJSE_RuntimeData::GetRootContext(
+    v8::Isolate* pIsolate) {
+  return v8::Local<v8::Context>::New(pIsolate, root_context_);
 }

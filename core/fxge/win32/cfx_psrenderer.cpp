@@ -7,7 +7,6 @@
 #include "core/fxge/win32/cfx_psrenderer.h"
 
 #include <math.h>
-#include <string.h>
 
 #include <algorithm>
 #include <array>
@@ -16,12 +15,17 @@
 #include <utility>
 
 #include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_stream.h"
-#include "core/fxcrt/span_util.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/span.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/cfx_fontcache.h"
@@ -32,31 +36,22 @@
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "core/fxge/freetype/fx_freetype.h"
 #include "core/fxge/text_char_pos.h"
 #include "core/fxge/win32/cfx_psfonttracker.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
 
-bool CanEmbed(CFX_Font* font) {
-  FT_UShort fstype = FT_Get_FSType_Flags(font->GetFaceRec());
-  return (fstype & (FT_FSTYPE_RESTRICTED_LICENSE_EMBEDDING |
-                    FT_FSTYPE_BITMAP_EMBEDDING_ONLY)) == 0;
-}
-
-absl::optional<ByteString> GenerateType42SfntData(
+std::optional<ByteString> GenerateType42SfntData(
     const ByteString& psname,
     pdfium::span<const uint8_t> font_data) {
   if (font_data.empty())
-    return absl::nullopt;
+    return std::nullopt;
 
   // Per Type 42 font spec.
   constexpr size_t kMaxSfntStringSize = 65535;
   if (font_data.size() > kMaxSfntStringSize) {
     // TODO(thestig): Fonts that are too big need to be written out in sections.
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Each byte is written as 2 ASCIIHex characters, so really 64 chars per line.
@@ -164,14 +159,20 @@ ByteString GenerateType42FontDictionary(const ByteString& psname,
 }
 
 ByteString GenerateType42FontData(const CFX_Font* font) {
-  const FXFT_FaceRec* font_face_rec = font->GetFaceRec();
-  if (!font_face_rec)
+  RetainPtr<const CFX_Face> face = font->GetFace();
+  if (!face) {
     return ByteString();
+  }
+
+  int num_glyphs = face->GetGlyphCount();
+  if (num_glyphs < 0) {
+    return ByteString();
+  }
 
   const ByteString psname = font->GetPsName();
   DCHECK(!psname.IsEmpty());
 
-  absl::optional<ByteString> sfnt_data =
+  std::optional<ByteString> sfnt_data =
       GenerateType42SfntData(psname, font->GetFontSpan());
   if (!sfnt_data.has_value())
     return ByteString();
@@ -181,8 +182,7 @@ ByteString GenerateType42FontData(const CFX_Font* font) {
   output += "\n";
   output += sfnt_data.value();
   output += GenerateType42FontDictionary(psname, font->GetRawBBox().value(),
-                                         font_face_rec->num_glyphs,
-                                         kGlyphsPerDescendantFont);
+                                         num_glyphs, kGlyphsPerDescendantFont);
   return output;
 }
 
@@ -197,7 +197,7 @@ struct CFX_PSRenderer::Glyph {
 
   UnownedPtr<CFX_Font> const font;
   const uint32_t glyph_index;
-  absl::optional<std::array<float, 4>> adjust_matrix;
+  std::optional<std::array<float, 4>> adjust_matrix;
 };
 
 CFX_PSRenderer::FaxCompressResult::FaxCompressResult() = default;
@@ -277,15 +277,15 @@ void CFX_PSRenderer::EndRendering() {
   std::streamoff preamble_pos = m_PreambleOutput.tellp();
   if (preamble_pos > 0) {
     m_pStream->WriteBlock(
-        {reinterpret_cast<const uint8_t*>(m_PreambleOutput.str().c_str()),
-         pdfium::base::checked_cast<size_t>(preamble_pos)});
+        pdfium::as_byte_span(m_PreambleOutput.str())
+            .first(pdfium::checked_cast<size_t>(preamble_pos)));
     m_PreambleOutput.str("");
   }
 
   // Flush `m_Output`. It's never empty because of the WriteString() call above.
-  m_pStream->WriteBlock(
-      {reinterpret_cast<const uint8_t*>(m_Output.str().c_str()),
-       pdfium::base::checked_cast<size_t>(std::streamoff(m_Output.tellp()))});
+  m_pStream->WriteBlock(pdfium::as_byte_span(m_Output.str())
+                            .first(pdfium::checked_cast<size_t>(
+                                std::streamoff(m_Output.tellp()))));
   m_Output.str("");
 }
 
@@ -388,7 +388,7 @@ void CFX_PSRenderer::SetClip_PathStroke(const CFX_Path& path,
 
   OutputPath(path, nullptr);
   CFX_FloatRect rect = path.GetBoundingBoxForStrokePath(
-      pGraphState->m_LineWidth, pGraphState->m_MiterLimit);
+      pGraphState->line_width(), pGraphState->miter_limit());
   m_ClipBox.Intersect(pObject2Device->TransformRect(rect).GetOuterRect());
 
   WriteString("strokepath W n sm\n");
@@ -453,44 +453,45 @@ bool CFX_PSRenderer::DrawPath(const CFX_Path& path,
 void CFX_PSRenderer::SetGraphState(const CFX_GraphStateData* pGraphState) {
   fxcrt::ostringstream buf;
   if (!m_bGraphStateSet ||
-      m_CurGraphState.m_LineCap != pGraphState->m_LineCap) {
-    buf << static_cast<int>(pGraphState->m_LineCap) << " J\n";
+      m_CurGraphState.line_cap() != pGraphState->line_cap()) {
+    buf << static_cast<int>(pGraphState->line_cap()) << " J\n";
   }
   if (!m_bGraphStateSet ||
-      m_CurGraphState.m_DashArray != pGraphState->m_DashArray) {
+      m_CurGraphState.dash_array() != pGraphState->dash_array()) {
     buf << "[";
-    for (const auto& dash : pGraphState->m_DashArray)
+    for (float dash : pGraphState->dash_array()) {
       buf << dash << " ";
-    buf << "]" << pGraphState->m_DashPhase << " d\n";
+    }
+    buf << "]" << pGraphState->dash_phase() << " d\n";
   }
   if (!m_bGraphStateSet ||
-      m_CurGraphState.m_LineJoin != pGraphState->m_LineJoin) {
-    buf << static_cast<int>(pGraphState->m_LineJoin) << " j\n";
+      m_CurGraphState.line_join() != pGraphState->line_join()) {
+    buf << static_cast<int>(pGraphState->line_join()) << " j\n";
   }
   if (!m_bGraphStateSet ||
-      m_CurGraphState.m_LineWidth != pGraphState->m_LineWidth) {
-    buf << pGraphState->m_LineWidth << " w\n";
+      m_CurGraphState.line_width() != pGraphState->line_width()) {
+    buf << pGraphState->line_width() << " w\n";
   }
   if (!m_bGraphStateSet ||
-      m_CurGraphState.m_MiterLimit != pGraphState->m_MiterLimit) {
-    buf << pGraphState->m_MiterLimit << " M\n";
+      m_CurGraphState.miter_limit() != pGraphState->miter_limit()) {
+    buf << pGraphState->miter_limit() << " M\n";
   }
   m_CurGraphState = *pGraphState;
   m_bGraphStateSet = true;
   WriteStream(buf);
 }
 
-bool CFX_PSRenderer::SetDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CFX_PSRenderer::SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                uint32_t color,
                                int left,
                                int top) {
   StartRendering();
   CFX_Matrix matrix = CFX_RenderDevice::GetFlipMatrix(
-      pSource->GetWidth(), pSource->GetHeight(), left, top);
-  return DrawDIBits(pSource, color, matrix, FXDIB_ResampleOptions());
+      bitmap->GetWidth(), bitmap->GetHeight(), left, top);
+  return DrawDIBits(std::move(bitmap), color, matrix, FXDIB_ResampleOptions());
 }
 
-bool CFX_PSRenderer::StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CFX_PSRenderer::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                    uint32_t color,
                                    int dest_left,
                                    int dest_top,
@@ -500,10 +501,10 @@ bool CFX_PSRenderer::StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   StartRendering();
   CFX_Matrix matrix = CFX_RenderDevice::GetFlipMatrix(dest_width, dest_height,
                                                       dest_left, dest_top);
-  return DrawDIBits(pSource, color, matrix, options);
+  return DrawDIBits(std::move(bitmap), color, matrix, options);
 }
 
-bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CFX_PSRenderer::DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                 uint32_t color,
                                 const CFX_Matrix& matrix,
                                 const FXDIB_ResampleOptions& options) {
@@ -511,12 +512,14 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   if ((matrix.a == 0 && matrix.b == 0) || (matrix.c == 0 && matrix.d == 0))
     return true;
 
-  if (pSource->IsAlphaFormat())
+  if (bitmap->IsAlphaFormat()) {
     return false;
+  }
 
   int alpha = FXARGB_A(color);
-  if (pSource->IsMaskFormat() && (alpha < 255 || pSource->GetBPP() != 1))
+  if (bitmap->IsMaskFormat() && (alpha < 255 || bitmap->GetBPP() != 1)) {
     return false;
+  }
 
   WriteString("q\n");
 
@@ -524,16 +527,16 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   buf << "[" << matrix.a << " " << matrix.b << " " << matrix.c << " "
       << matrix.d << " " << matrix.e << " " << matrix.f << "]cm ";
 
-  const int width = pSource->GetWidth();
-  const int height = pSource->GetHeight();
+  const int width = bitmap->GetWidth();
+  const int height = bitmap->GetHeight();
   buf << width << " " << height;
 
-  if (pSource->GetBPP() == 1 && !pSource->HasPalette()) {
-    FaxCompressResult compress_result = FaxCompressData(pSource);
+  if (bitmap->GetBPP() == 1 && !bitmap->HasPalette()) {
+    FaxCompressResult compress_result = FaxCompressData(bitmap);
     if (compress_result.data.empty())
       return false;
 
-    if (pSource->IsMaskFormat()) {
+    if (bitmap->IsMaskFormat()) {
       SetColor(color);
       m_bColorSet = false;
       buf << " true[";
@@ -547,61 +550,74 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
       buf << "<</K -1/EndOfBlock false/Columns " << width << "/Rows " << height
           << ">>/CCITTFaxDecode filter ";
     }
-    if (pSource->IsMaskFormat())
+    if (bitmap->IsMaskFormat()) {
       buf << "iM\n";
-    else
+    } else {
       buf << "false 1 colorimage\n";
+    }
 
     WriteStream(buf);
     WritePSBinary(compress_result.data);
   } else {
-    RetainPtr<CFX_DIBBase> pConverted = pSource;
-    switch (pSource->GetFormat()) {
+    switch (bitmap->GetFormat()) {
       case FXDIB_Format::k1bppRgb:
-      case FXDIB_Format::kRgb32:
-        pConverted = pConverted->ConvertTo(FXDIB_Format::kRgb);
+      case FXDIB_Format::kBgrx:
+        bitmap = bitmap->ConvertTo(FXDIB_Format::kBgr);
         break;
       case FXDIB_Format::k8bppRgb:
-        if (pSource->HasPalette())
-          pConverted = pConverted->ConvertTo(FXDIB_Format::kRgb);
+        if (bitmap->HasPalette()) {
+          bitmap = bitmap->ConvertTo(FXDIB_Format::kBgr);
+        }
         break;
-      default:
+      case FXDIB_Format::kInvalid:
+      case FXDIB_Format::k1bppMask:
+      case FXDIB_Format::k8bppMask:
+      case FXDIB_Format::kBgr:
         break;
+      case FXDIB_Format::kBgra:
+#if defined(PDF_USE_SKIA)
+      case FXDIB_Format::kBgraPremul:
+#endif
+        // Should have returned early due to IsAlphaFormat() check above.
+        NOTREACHED_NORETURN();
     }
-    if (!pConverted) {
+    if (!bitmap) {
       WriteString("\nQ\n");
       return false;
     }
 
-    int bpp = pConverted->GetBPP() / 8;
+    const int bytes_per_pixel = bitmap->GetBPP() / 8;
     uint8_t* output_buf = nullptr;
     size_t output_size = 0;
     bool output_buf_is_owned = true;
-    absl::optional<PSCompressResult> compress_result;
+    std::optional<PSCompressResult> compress_result;
     ByteString filter;
     if ((m_Level.value() == RenderingLevel::kLevel2 || options.bLossy) &&
-        m_pEncoderIface->pJpegEncodeFunc(pConverted, &output_buf,
-                                         &output_size)) {
+        m_pEncoderIface->pJpegEncodeFunc(bitmap, &output_buf, &output_size)) {
       filter = "/DCTDecode filter ";
     } else {
-      int src_pitch = width * bpp;
+      int src_pitch = width * bytes_per_pixel;
       output_size = height * src_pitch;
       output_buf = FX_Alloc(uint8_t, output_size);
       for (int row = 0; row < height; row++) {
-        const uint8_t* src_scan = pConverted->GetScanline(row).data();
-        uint8_t* dest_scan = output_buf + row * src_pitch;
-        if (bpp == 3) {
-          for (int col = 0; col < width; col++) {
-            *dest_scan++ = src_scan[2];
-            *dest_scan++ = src_scan[1];
-            *dest_scan++ = *src_scan;
-            src_scan += 3;
-          }
+        const uint8_t* src_scan = bitmap->GetScanline(row).data();
+        uint8_t* dest_scan = UNSAFE_TODO(output_buf + row * src_pitch);
+        if (bytes_per_pixel == 3) {
+          UNSAFE_TODO({
+            for (int col = 0; col < width; col++) {
+              *dest_scan++ = src_scan[2];
+              *dest_scan++ = src_scan[1];
+              *dest_scan++ = *src_scan;
+              src_scan += 3;
+            }
+          });
         } else {
-          memcpy(dest_scan, src_scan, src_pitch);
+          UNSAFE_TODO(FXSYS_memcpy(dest_scan, src_scan, src_pitch));
         }
       }
-      compress_result = PSCompressData({output_buf, output_size});
+      // SAFETY: `output_size` passed to FX_Alloc() of `output_buf`.
+      compress_result = PSCompressData(
+          UNSAFE_BUFFERS(pdfium::make_span(output_buf, output_size)));
       if (compress_result.has_value()) {
         FX_Free(output_buf);
         output_buf_is_owned = false;
@@ -616,11 +632,12 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
     if (!filter.IsEmpty())
       buf << filter;
 
-    buf << "false " << bpp;
+    buf << "false " << bytes_per_pixel;
     buf << " colorimage\n";
     WriteStream(buf);
 
-    WritePSBinary({output_buf, output_size});
+    // SAFETY: `output_size` passed to FX_Alloc() of `output_buf`.
+    WritePSBinary(UNSAFE_BUFFERS(pdfium::make_span(output_buf, output_size)));
     if (output_buf_is_owned)
       FX_Free(output_buf);
   }
@@ -661,7 +678,7 @@ void CFX_PSRenderer::FindPSFontGlyph(CFX_GlyphCache* pGlyphCache,
         found = true;
       }
       if (found) {
-        *ps_fontnum = pdfium::base::checked_cast<int>(i / 256);
+        *ps_fontnum = pdfium::checked_cast<int>(i / 256);
         *ps_glyphindex = i % 256;
         return;
       }
@@ -669,8 +686,7 @@ void CFX_PSRenderer::FindPSFontGlyph(CFX_GlyphCache* pGlyphCache,
   }
 
   m_PSFontList.push_back(std::make_unique<Glyph>(pFont, charpos.m_GlyphIndex));
-  *ps_fontnum =
-      pdfium::base::checked_cast<int>((m_PSFontList.size() - 1) / 256);
+  *ps_fontnum = pdfium::checked_cast<int>((m_PSFontList.size() - 1) / 256);
   *ps_glyphindex = (m_PSFontList.size() - 1) % 256;
   if (*ps_glyphindex == 0) {
     fxcrt::ostringstream buf;
@@ -746,19 +762,21 @@ void CFX_PSRenderer::DrawTextAsType3Font(int char_count,
   CFX_FontCache* pCache = CFX_GEModule::Get()->GetFontCache();
   RetainPtr<CFX_GlyphCache> pGlyphCache = pCache->GetGlyphCache(font);
   int last_fontnum = -1;
-  for (int i = 0; i < char_count; i++) {
-    int ps_fontnum;
-    int ps_glyphindex;
-    FindPSFontGlyph(pGlyphCache.Get(), font, char_pos[i], &ps_fontnum,
-                    &ps_glyphindex);
-    if (last_fontnum != ps_fontnum) {
-      buf << "/X" << ps_fontnum << " Ff " << font_size << " Fs Sf ";
-      last_fontnum = ps_fontnum;
+  UNSAFE_TODO({
+    for (int i = 0; i < char_count; i++) {
+      int ps_fontnum;
+      int ps_glyphindex;
+      FindPSFontGlyph(pGlyphCache.Get(), font, char_pos[i], &ps_fontnum,
+                      &ps_glyphindex);
+      if (last_fontnum != ps_fontnum) {
+        buf << "/X" << ps_fontnum << " Ff " << font_size << " Fs Sf ";
+        last_fontnum = ps_fontnum;
+      }
+      buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
+      ByteString hex = ByteString::Format("<%02X>", ps_glyphindex);
+      buf << hex.AsStringView() << "Tj\n";
     }
-    buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
-    ByteString hex = ByteString::Format("<%02X>", ps_glyphindex);
-    buf << hex.AsStringView() << "Tj\n";
-  }
+  });
 }
 
 bool CFX_PSRenderer::DrawTextAsType42Font(int char_count,
@@ -766,8 +784,14 @@ bool CFX_PSRenderer::DrawTextAsType42Font(int char_count,
                                           CFX_Font* font,
                                           float font_size,
                                           fxcrt::ostringstream& buf) {
-  if (m_Level != RenderingLevel::kLevel3Type42 || !CanEmbed(font))
+  if (m_Level != RenderingLevel::kLevel3Type42) {
     return false;
+  }
+
+  RetainPtr<CFX_Face> face = font->GetFace();
+  if (!face || !face->CanEmbed()) {
+    return false;
+  }
 
   if (font->GetFontType() != CFX_Font::FontType::kCIDTrueType)
     return false;
@@ -783,13 +807,15 @@ bool CFX_PSRenderer::DrawTextAsType42Font(int char_count,
   }
 
   buf << "/" << font->GetPsName() << " " << font_size << " selectfont\n";
-  for (int i = 0; i < char_count; ++i) {
-    buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
-    uint8_t hi = char_pos[i].m_GlyphIndex / 256;
-    uint8_t lo = char_pos[i].m_GlyphIndex % 256;
-    ByteString hex = ByteString::Format("<%02X%02X>", hi, lo);
-    buf << hex.AsStringView() << "Tj\n";
-  }
+  UNSAFE_TODO({
+    for (int i = 0; i < char_count; ++i) {
+      buf << char_pos[i].m_Origin.x << " " << char_pos[i].m_Origin.y << " m";
+      uint8_t hi = char_pos[i].m_GlyphIndex / 256;
+      uint8_t lo = char_pos[i].m_GlyphIndex % 256;
+      ByteString hex = ByteString::Format("<%02X%02X>", hi, lo);
+      buf << hex.AsStringView() << "Tj\n";
+    }
+  });
   return true;
 }
 
@@ -833,7 +859,7 @@ bool CFX_PSRenderer::DrawText(int nChars,
 }
 
 CFX_PSRenderer::FaxCompressResult CFX_PSRenderer::FaxCompressData(
-    RetainPtr<CFX_DIBBase> src) const {
+    RetainPtr<const CFX_DIBBase> src) const {
   DCHECK_EQ(1, src->GetBPP());
 
   FaxCompressResult result;
@@ -858,16 +884,15 @@ CFX_PSRenderer::FaxCompressResult CFX_PSRenderer::FaxCompressData(
   result.data.resize(safe_size.ValueOrDie());
   auto dest_span = pdfium::make_span(result.data);
   for (int row = 0; row < height; row++) {
-    pdfium::span<const uint8_t> src_scan = src->GetScanline(row);
-    fxcrt::spancpy(dest_span.subspan(row * pitch, pitch), src_scan);
+    fxcrt::Copy(src->GetScanline(row), dest_span.subspan(row * pitch, pitch));
   }
   return result;
 }
 
-absl::optional<CFX_PSRenderer::PSCompressResult> CFX_PSRenderer::PSCompressData(
+std::optional<CFX_PSRenderer::PSCompressResult> CFX_PSRenderer::PSCompressData(
     pdfium::span<const uint8_t> src_span) const {
   if (src_span.size() < 1024)
-    return absl::nullopt;
+    return std::nullopt;
 
   DataVector<uint8_t> (*encode_func)(pdfium::span<const uint8_t> src_span);
   ByteString filter;
@@ -882,7 +907,7 @@ absl::optional<CFX_PSRenderer::PSCompressResult> CFX_PSRenderer::PSCompressData(
 
   DataVector<uint8_t> decode_result = encode_func(src_span);
   if (decode_result.size() == 0 || decode_result.size() >= src_span.size())
-    return absl::nullopt;
+    return std::nullopt;
 
   PSCompressResult result;
   result.data = std::move(decode_result);
@@ -898,14 +923,15 @@ void CFX_PSRenderer::WritePSBinary(pdfium::span<const uint8_t> data) {
   DataVector<uint8_t> encoded_data = m_pEncoderIface->pA85EncodeFunc(data);
   pdfium::span<const uint8_t> result =
       encoded_data.empty() ? data : encoded_data;
-  m_Output.write(reinterpret_cast<const char*>(result.data()), result.size());
+  auto chars = pdfium::as_chars(result);
+  m_Output.write(chars.data(), chars.size());
 }
 
 void CFX_PSRenderer::WriteStream(fxcrt::ostringstream& stream) {
   std::streamoff output_pos = stream.tellp();
   if (output_pos > 0) {
     m_Output.write(stream.str().c_str(),
-                   pdfium::base::checked_cast<size_t>(output_pos));
+                   pdfium::checked_cast<size_t>(output_pos));
   }
 }
 
@@ -914,7 +940,7 @@ void CFX_PSRenderer::WriteString(ByteStringView str) {
 }
 
 // static
-absl::optional<ByteString> CFX_PSRenderer::GenerateType42SfntDataForTesting(
+std::optional<ByteString> CFX_PSRenderer::GenerateType42SfntDataForTesting(
     const ByteString& psname,
     pdfium::span<const uint8_t> font_data) {
   return GenerateType42SfntData(psname, font_data);

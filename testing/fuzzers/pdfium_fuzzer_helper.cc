@@ -16,13 +16,15 @@
 #include <tuple>
 #include <utility>
 
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/fx_memcpy_wrappers.h"
+#include "core/fxcrt/numerics/checked_math.h"
+#include "core/fxcrt/span.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_dataavail.h"
 #include "public/fpdf_ext.h"
 #include "public/fpdf_text.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/numerics/checked_math.h"
 
 namespace {
 
@@ -35,11 +37,11 @@ class FuzzerTestLoader {
                       unsigned char* pBuf,
                       unsigned long size) {
     FuzzerTestLoader* pLoader = static_cast<FuzzerTestLoader*>(param);
-    pdfium::base::CheckedNumeric<size_t> end = pos;
+    pdfium::CheckedNumeric<size_t> end = pos;
     end += size;
     CHECK_LE(end.ValueOrDie(), pLoader->m_Span.size());
 
-    memcpy(pBuf, &pLoader->m_Span[pos], size);
+    FXSYS_memcpy(pBuf, &pLoader->m_Span[pos], size);
     return 1;
   }
 
@@ -113,10 +115,7 @@ bool PDFiumFuzzerHelper::OnFormFillEnvLoaded(FPDF_DOCUMENT doc) {
 }
 
 void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
-  int render_flags;
-  int form_flags;
-  std::tie(render_flags, form_flags) =
-      GetRenderingAndFormFlagFromData(data, len);
+  auto [render_flags, form_flags] = GetRenderingAndFormFlagFromData(data, len);
 
   IPDF_JSPLATFORM platform_callbacks;
   memset(&platform_callbacks, '\0', sizeof(platform_callbacks));
@@ -131,7 +130,8 @@ void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
   form_callbacks.version = GetFormCallbackVersion();
   form_callbacks.m_pJsPlatform = &platform_callbacks;
 
-  FuzzerTestLoader loader({data, len});
+  // SAFETY: trusted arguments from fuzzer,
+  FuzzerTestLoader loader(UNSAFE_BUFFERS(pdfium::make_span(data, len)));
   FPDF_FILEACCESS file_access;
   memset(&file_access, '\0', sizeof(file_access));
   file_access.m_FileLen = static_cast<unsigned long>(len);
@@ -174,8 +174,6 @@ void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
 
   if (!doc)
     return;
-
-  (void)FPDF_GetDocPermissions(doc.get());
 
   ScopedFPDFFormHandle form(
       FPDFDOC_InitFormFillEnvironment(doc.get(), &form_callbacks));
@@ -223,7 +221,9 @@ bool PDFiumFuzzerHelper::RenderPage(FPDF_DOCUMENT doc,
   int height = static_cast<int>(FPDF_GetPageHeightF(page.get()) * scale);
   ScopedFPDFBitmap bitmap(FPDFBitmap_Create(width, height, 0));
   if (bitmap) {
-    FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, 0xFFFFFFFF);
+    if (!FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, 0xFFFFFFFF)) {
+      return false;
+    }
     FPDF_RenderPageBitmap(bitmap.get(), page.get(), 0, 0, width, height, 0,
                           render_flags);
     FPDF_FFLDraw(form, bitmap.get(), page.get(), 0, 0, width, height, 0,

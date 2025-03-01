@@ -11,9 +11,6 @@
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <sys/stat.h>
-#elif defined(__Fuchsia__)
-#include <sys/stat.h>
-#include <unistd.h>
 #else  // Linux
 #include <linux/limits.h>
 #include <sys/stat.h>
@@ -22,13 +19,12 @@
 
 #include <string>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_system.h"
-#include "third_party/base/check.h"
 
 namespace {
 
-#if defined(__APPLE__) || defined(__Fuchsia__) || \
-    (defined(ANDROID) && __ANDROID_API__ < 21)
+#if defined(__APPLE__) || (defined(ANDROID) && __ANDROID_API__ < 21)
 using stat_wrapper_t = struct stat;
 
 int CallStat(const char* path, stat_wrapper_t* sb) {
@@ -157,15 +153,17 @@ bool PathService::GetTestDataDir(std::string* path) {
 }
 
 // static
-bool PathService::GetTestFilePath(const std::string& file_name,
-                                  std::string* path) {
-  if (!GetTestDataDir(path))
-    return false;
+std::string PathService::GetTestFilePath(const std::string& file_name) {
+  std::string path;
+  if (!GetTestDataDir(&path)) {
+    return std::string();
+  }
 
-  if (!EndsWithSeparator(*path))
-    path->push_back(PATH_SEPARATOR);
-  path->append(file_name);
-  return true;
+  if (!EndsWithSeparator(path)) {
+    path.push_back(PATH_SEPARATOR);
+  }
+  path.append(file_name);
+  return path;
 }
 
 // static

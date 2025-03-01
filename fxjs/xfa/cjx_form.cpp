@@ -6,8 +6,7 @@
 
 #include "fxjs/xfa/cjx_form.h"
 
-#include <vector>
-
+#include "core/fxcrt/span.h"
 #include "fxjs/fxv8.h"
 #include "fxjs/js_resources.h"
 #include "fxjs/xfa/cfxjse_engine.h"
@@ -38,9 +37,8 @@ bool CJX_Form::DynamicTypeIs(TypeTag eType) const {
   return eType == static_type__ || ParentType__::DynamicTypeIs(eType);
 }
 
-CJS_Result CJX_Form::formNodes(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Form::formNodes(CFXJSE_Engine* runtime,
+                               pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -58,7 +56,7 @@ CJS_Result CJX_Form::formNodes(
 }
 
 CJS_Result CJX_Form::remerge(CFXJSE_Engine* runtime,
-                             const std::vector<v8::Local<v8::Value>>& params) {
+                             pdfium::span<v8::Local<v8::Value>> params) {
   if (!params.empty())
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -66,9 +64,8 @@ CJS_Result CJX_Form::remerge(CFXJSE_Engine* runtime,
   return CJS_Result::Success();
 }
 
-CJS_Result CJX_Form::execInitialize(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Form::execInitialize(CFXJSE_Engine* runtime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   if (!params.empty())
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -79,9 +76,8 @@ CJS_Result CJX_Form::execInitialize(
   return CJS_Result::Success();
 }
 
-CJS_Result CJX_Form::recalculate(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Form::recalculate(CFXJSE_Engine* runtime,
+                                 pdfium::span<v8::Local<v8::Value>> params) {
   CXFA_EventParam* pEventParam = runtime->GetEventParam();
   if (pEventParam && (pEventParam->m_eType == XFA_EVENT_Calculate ||
                       pEventParam->m_eType == XFA_EVENT_InitCalculate)) {
@@ -100,9 +96,8 @@ CJS_Result CJX_Form::recalculate(
   return CJS_Result::Success();
 }
 
-CJS_Result CJX_Form::execCalculate(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Form::execCalculate(CFXJSE_Engine* runtime,
+                                   pdfium::span<v8::Local<v8::Value>> params) {
   if (!params.empty())
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -113,9 +108,8 @@ CJS_Result CJX_Form::execCalculate(
   return CJS_Result::Success();
 }
 
-CJS_Result CJX_Form::execValidate(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Form::execValidate(CFXJSE_Engine* runtime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 0)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -140,7 +134,7 @@ void CJX_Form::checksumS(v8::Isolate* pIsolate,
     return;
   }
 
-  absl::optional<WideString> checksum =
+  std::optional<WideString> checksum =
       TryAttribute(XFA_Attribute::Checksum, false);
   *pValue = fxv8::NewStringHelper(
       pIsolate,

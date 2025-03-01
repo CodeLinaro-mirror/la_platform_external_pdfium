@@ -6,11 +6,12 @@
 
 #include "core/fxcrt/fx_memory.h"
 
-#include "base/allocator/partition_allocator/partition_alloc.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_safe_types.h"
-#include "third_party/base/no_destructor.h"
 
-#if !defined(PDF_USE_PARTITION_ALLOC)
+#if defined(PDF_USE_PARTITION_ALLOC)
+#include "partition_alloc/partition_alloc.h"
+#else
 #error "File compiled under wrong build option."
 #endif
 
@@ -18,30 +19,34 @@ namespace {
 
 constexpr partition_alloc::PartitionOptions kOptions = {};
 
+struct Allocators {
+#ifndef V8_ENABLE_SANDBOX
+  partition_alloc::PartitionAllocator array_buffer_allocator{kOptions};
+#endif
+
+  partition_alloc::PartitionAllocator general_allocator{kOptions};
+  partition_alloc::PartitionAllocator string_allocator{kOptions};
+};
+
+Allocators* g_allocators = nullptr;
+
 #ifndef V8_ENABLE_SANDBOX
 partition_alloc::PartitionAllocator& GetArrayBufferPartitionAllocator() {
-  static pdfium::base::NoDestructor<partition_alloc::PartitionAllocator>
-      s_array_buffer_allocator(kOptions);
-  return *s_array_buffer_allocator;
+  return g_allocators->array_buffer_allocator;
 }
-#endif  //  V8_ENABLE_SANDBOX
+#endif
 
 partition_alloc::PartitionAllocator& GetGeneralPartitionAllocator() {
-  static pdfium::base::NoDestructor<partition_alloc::PartitionAllocator>
-      s_general_allocator(kOptions);
-  return *s_general_allocator;
+  return g_allocators->general_allocator;
 }
 
 partition_alloc::PartitionAllocator& GetStringPartitionAllocator() {
-  static pdfium::base::NoDestructor<partition_alloc::PartitionAllocator>
-      s_string_allocator(kOptions);
-  return *s_string_allocator;
+  return g_allocators->string_allocator;
 }
 
 }  // namespace
 
-namespace pdfium {
-namespace internal {
+namespace pdfium::internal {
 
 void* Alloc(size_t num_members, size_t member_size) {
   FX_SAFE_SIZE_T total = member_size;
@@ -49,9 +54,10 @@ void* Alloc(size_t num_members, size_t member_size) {
   if (!total.IsValid())
     return nullptr;
 
-  return GetGeneralPartitionAllocator().root()->AllocWithFlags(
-      partition_alloc::AllocFlags::kReturnNull, total.ValueOrDie(),
-      "GeneralPartition");
+  return GetGeneralPartitionAllocator()
+      .root()
+      ->AllocInline<partition_alloc::AllocFlags::kReturnNull>(
+          total.ValueOrDie(), "GeneralPartition");
 }
 
 void* Calloc(size_t num_members, size_t member_size) {
@@ -60,10 +66,11 @@ void* Calloc(size_t num_members, size_t member_size) {
   if (!total.IsValid())
     return nullptr;
 
-  return GetGeneralPartitionAllocator().root()->AllocWithFlags(
-      partition_alloc::AllocFlags::kReturnNull |
-          partition_alloc::AllocFlags::kZeroFill,
-      total.ValueOrDie(), "GeneralPartition");
+  return GetGeneralPartitionAllocator()
+      .root()
+      ->AllocInline<partition_alloc::AllocFlags::kReturnNull |
+                    partition_alloc::AllocFlags::kZeroFill>(total.ValueOrDie(),
+                                                            "GeneralPartition");
 }
 
 void* Realloc(void* ptr, size_t num_members, size_t member_size) {
@@ -72,9 +79,10 @@ void* Realloc(void* ptr, size_t num_members, size_t member_size) {
   if (!size.IsValid())
     return nullptr;
 
-  return GetGeneralPartitionAllocator().root()->ReallocWithFlags(
-      partition_alloc::AllocFlags::kReturnNull, ptr, size.ValueOrDie(),
-      "GeneralPartition");
+  return GetGeneralPartitionAllocator()
+      .root()
+      ->Realloc<partition_alloc::AllocFlags::kReturnNull>(
+          ptr, size.ValueOrDie(), "GeneralPartition");
 }
 
 void Dealloc(void* ptr) {
@@ -97,9 +105,10 @@ void* StringAlloc(size_t num_members, size_t member_size) {
   if (!total.IsValid())
     return nullptr;
 
-  return GetStringPartitionAllocator().root()->AllocWithFlags(
-      partition_alloc::AllocFlags::kReturnNull, total.ValueOrDie(),
-      "StringPartition");
+  return GetStringPartitionAllocator()
+      .root()
+      ->AllocInline<partition_alloc::AllocFlags::kReturnNull>(
+          total.ValueOrDie(), "StringPartition");
 }
 
 void StringDealloc(void* ptr) {
@@ -116,28 +125,25 @@ void StringDealloc(void* ptr) {
   }
 }
 
-}  // namespace internal
-}  // namespace pdfium
+}  // namespace pdfium::internal
 
 void FX_InitializeMemoryAllocators() {
-  static bool s_partition_allocators_initialized = false;
-  if (!s_partition_allocators_initialized) {
-    partition_alloc::PartitionAllocGlobalInit(FX_OutOfMemoryTerminate);
-    // These calls force the allocators to be created and initialized (via magic
-    // of static local variables).
-#ifndef V8_ENABLE_SANDBOX
-    GetArrayBufferPartitionAllocator();
-#endif  // V8_ENABLE_SANDBOX
-    GetGeneralPartitionAllocator();
-    GetStringPartitionAllocator();
-    s_partition_allocators_initialized = true;
+  if (!g_allocators) {
+    g_allocators = new Allocators();
   }
+}
+
+void FX_DestroyMemoryAllocators() {
+  delete g_allocators;
+  g_allocators = nullptr;
 }
 
 #ifndef V8_ENABLE_SANDBOX
 void* FX_ArrayBufferAllocate(size_t length) {
-  return GetArrayBufferPartitionAllocator().root()->AllocWithFlags(
-      partition_alloc::AllocFlags::kZeroFill, length, "FXArrayBuffer");
+  return GetArrayBufferPartitionAllocator()
+      .root()
+      ->AllocInline<partition_alloc::AllocFlags::kZeroFill>(length,
+                                                            "FXArrayBuffer");
 }
 
 void* FX_ArrayBufferAllocateUninitialized(size_t length) {
