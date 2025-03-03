@@ -10,11 +10,11 @@
 #include <set>
 #include <utility>
 
+#include "core/fxcrt/containers/contains.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/base/containers/contains.h"
 
 #if defined(PDF_USE_PARTITION_ALLOC)
-#include "base/allocator/partition_allocator/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
+#include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
 #endif
 
 namespace fxcrt {
@@ -265,8 +265,10 @@ TEST(UnownedPtr, TransparentCompare) {
 }
 
 #if defined(PDF_USE_PARTITION_ALLOC)
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
-    BUILDFLAG(HAS_64_BIT_POINTERS) && BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) &&   \
+    PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) &&   \
+    !PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) && \
+    PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 
 TEST(UnownedPtr, DanglingGetsQuarantined) {
   partition_alloc::PartitionRoot* root =
@@ -291,7 +293,7 @@ TEST(UnownedPtr, DanglingGetsQuarantined) {
       original_byte_count);
 }
 
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) ...
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) ...
 #endif  // PDF_USE_PARTITION_ALLOC
 
 }  // namespace fxcrt

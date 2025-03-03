@@ -11,17 +11,18 @@
 #include <type_traits>
 #include <utility>
 
+#include "core/fxcrt/check_op.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_2d_size.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxge/calculate_pitch.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "third_party/base/check_op.h"
-#include "third_party/base/containers/span.h"
-#include "third_party/base/notreached.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
@@ -33,41 +34,35 @@
 
 namespace {
 
-// Releases `CFX_DIBBase` "leaked" by `CreateSkiaImageFromDib()`.
+// Releases `CFX_DIBitmap` "leaked" by `CreateSkiaImageFromDib()`.
 void ReleaseRetainedHeldBySkImage(const void* /*pixels*/,
                                   SkImages::ReleaseContext context) {
-  RetainPtr<const CFX_DIBBase> retained;
-  retained.Unleak(reinterpret_cast<const CFX_DIBBase*>(context));
+  RetainPtr<const CFX_DIBitmap> realized_bitmap;
+  realized_bitmap.Unleak(reinterpret_cast<const CFX_DIBitmap*>(context));
 }
 
-// Creates an `SkImage` from a `CFX_DIBBase`, sharing the underlying pixels if
-// possible.
-//
-// Note that an `SkImage` must be immutable, so if sharing pixels, they must not
-// be modified during the lifetime of the `SkImage`.
+// Creates an `SkImage` from a `CFX_DIBBase`.
 sk_sp<SkImage> CreateSkiaImageFromDib(const CFX_DIBBase* source,
                                       SkColorType color_type,
                                       SkAlphaType alpha_type) {
   // Make sure the DIB is backed by a buffer.
-  RetainPtr<const CFX_DIBBase> retained;
-  if (source->GetBuffer().empty()) {
-    retained = source->Realize();
-    if (!retained) {
-      return nullptr;
-    }
-    DCHECK(!retained->GetBuffer().empty());
-  } else {
-    retained.Reset(source);
+  RetainPtr<const CFX_DIBitmap> realized_bitmap = source->RealizeIfNeeded();
+  if (!realized_bitmap) {
+    return nullptr;
   }
+  CHECK(!realized_bitmap->GetBuffer().empty());
 
-  // Convert unowned pointer to a retained pointer, then "leak" to `SkImage`.
-  source = retained.Leak();
-  SkImageInfo info = SkImageInfo::Make(source->GetWidth(), source->GetHeight(),
+  // Transfer ownership of `realized_bitmap` to `bitmap`, which will be freed by
+  // ReleaseRetainedHeldBySkImage().
+  const CFX_DIBitmap* bitmap = realized_bitmap.Leak();
+  SkImageInfo info = SkImageInfo::Make(bitmap->GetWidth(), bitmap->GetHeight(),
                                        color_type, alpha_type);
-  return SkImages::RasterFromPixmap(
-      SkPixmap(info, source->GetBuffer().data(), source->GetPitch()),
+  auto result = SkImages::RasterFromPixmap(
+      SkPixmap(info, bitmap->GetBuffer().data(), bitmap->GetPitch()),
       /*rasterReleaseProc=*/ReleaseRetainedHeldBySkImage,
-      /*releaseContext=*/const_cast<CFX_DIBBase*>(source));
+      /*releaseContext=*/const_cast<CFX_DIBitmap*>(bitmap));
+  CHECK(result);  // Otherwise, `bitmap` leaks.
+  return result;
 }
 
 // Releases allocated memory "leaked" by `CreateSkiaImageFromTransformedDib()`.
@@ -86,7 +81,7 @@ class PixelTransformTraits<1, PixelTransform> {
   using Result = std::invoke_result_t<PixelTransform, bool>;
 
   static Result Invoke(PixelTransform&& pixel_transform,
-                       const uint8_t* scanline,
+                       pdfium::span<const uint8_t> scanline,
                        size_t column) {
     uint8_t kMask = 1 << (7 - column % 8);
     return pixel_transform(!!(scanline[column / 8] & kMask));
@@ -99,7 +94,7 @@ class PixelTransformTraits<8, PixelTransform> {
   using Result = std::invoke_result_t<PixelTransform, uint8_t>;
 
   static Result Invoke(PixelTransform&& pixel_transform,
-                       const uint8_t* scanline,
+                       pdfium::span<const uint8_t> scanline,
                        size_t column) {
     return pixel_transform(scanline[column]);
   }
@@ -112,9 +107,24 @@ class PixelTransformTraits<24, PixelTransform> {
       std::invoke_result_t<PixelTransform, uint8_t, uint8_t, uint8_t>;
 
   static Result Invoke(PixelTransform&& pixel_transform,
-                       const uint8_t* scanline,
+                       pdfium::span<const uint8_t> scanline,
                        size_t column) {
     size_t offset = column * 3;
+    return pixel_transform(scanline[offset + 2], scanline[offset + 1],
+                           scanline[offset]);
+  }
+};
+
+template <typename PixelTransform>
+class PixelTransformTraits<32, PixelTransform> {
+ public:
+  using Result =
+      std::invoke_result_t<PixelTransform, uint8_t, uint8_t, uint8_t>;
+
+  static Result Invoke(PixelTransform&& pixel_transform,
+                       pdfium::span<const uint8_t> scanline,
+                       size_t column) {
+    size_t offset = column * 4;
     return pixel_transform(scanline[offset + 2], scanline[offset + 1],
                            scanline[offset]);
   }
@@ -123,22 +133,6 @@ class PixelTransformTraits<24, PixelTransform> {
 void ValidateScanlineSize(pdfium::span<const uint8_t> scanline,
                           size_t min_row_bytes) {
   DCHECK_GE(scanline.size(), min_row_bytes);
-}
-
-void ValidateBufferSize(pdfium::span<const uint8_t> buffer,
-                        const CFX_DIBBase& source) {
-#if DCHECK_IS_ON()
-  if (source.GetHeight() == 0) {
-    return;
-  }
-
-  FX_SAFE_SIZE_T buffer_size = source.GetHeight() - 1;
-  buffer_size *= source.GetPitch();
-  buffer_size += fxge::CalculatePitch8OrDie(source.GetBPP(), /*components=*/1,
-                                            source.GetWidth());
-
-  DCHECK_GE(buffer.size(), buffer_size.ValueOrDie());
-#endif  // DCHECK_IS_ON()
 }
 
 // Creates an `SkImage` from a `CFX_DIBBase`, transforming the source pixels
@@ -167,40 +161,20 @@ sk_sp<SkImage> CreateSkiaImageFromTransformedDib(
     return nullptr;
   }
 
-  // Transform source pixels to output pixels.
-  pdfium::span<const uint8_t> source_buffer = source.GetBuffer();
+  // Transform source pixels to output pixels. Iterate by individual scanline.
   Result* output_cursor = reinterpret_cast<Result*>(output.get());
-  if (source_buffer.empty()) {
-    // No buffer; iterate by individual scanline.
-    const size_t min_row_bytes =
-        fxge::CalculatePitch8OrDie(source.GetBPP(), /*components=*/1, width);
-    DCHECK_LE(min_row_bytes, source.GetPitch());
+  const size_t min_row_bytes =
+      fxge::CalculatePitch8OrDie(source.GetBPP(), /*components=*/1, width);
+  DCHECK_LE(min_row_bytes, source.GetPitch());
 
-    int line = 0;
-    for (int row = 0; row < height; ++row) {
-      pdfium::span<const uint8_t> scanline = source.GetScanline(line++);
-      ValidateScanlineSize(scanline, min_row_bytes);
+  int line = 0;
+  for (int row = 0; row < height; ++row) {
+    pdfium::span<const uint8_t> scanline = source.GetScanline(line++);
+    ValidateScanlineSize(scanline, min_row_bytes);
 
-      for (int column = 0; column < width; ++column) {
-        *output_cursor++ =
-            Traits::Invoke(std::forward<PixelTransform>(pixel_transform),
-                           scanline.data(), column);
-      }
-    }
-  } else {
-    // Iterate over the entire buffer.
-    ValidateBufferSize(source_buffer, source);
-    const size_t row_bytes = source.GetPitch();
-
-    const uint8_t* next_scanline = source_buffer.data();
-    for (int row = 0; row < height; ++row) {
-      const uint8_t* scanline = next_scanline;
-      next_scanline += row_bytes;
-
-      for (int column = 0; column < width; ++column) {
-        *output_cursor++ = Traits::Invoke(
-            std::forward<PixelTransform>(pixel_transform), scanline, column);
-      }
+    for (int column = 0; column < width; ++column) {
+      UNSAFE_TODO(*output_cursor++) = Traits::Invoke(
+          std::forward<PixelTransform>(pixel_transform), scanline, column);
     }
   }
 
@@ -270,19 +244,28 @@ sk_sp<SkImage> CFX_DIBBase::RealizeSkImage() const {
       return CreateSkiaImageFromTransformedDib</*source_bits_per_pixel=*/24>(
           *this, kBGRA_8888_SkColorType, kOpaque_SkAlphaType,
           [](uint8_t red, uint8_t green, uint8_t blue) {
-            return SkPackARGB32NoCheck(0xFF, red, green, blue);
+            return SkPackARGB32(0xFF, red, green, blue);
           });
 
     case 32:
-      return CreateSkiaImageFromDib(
-          this, kBGRA_8888_SkColorType,
-          IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType);
-
+      switch (GetFormat()) {
+        case FXDIB_Format::kBgrx:
+          return CreateSkiaImageFromTransformedDib<
+              /*source_bits_per_pixel=*/32>(
+              *this, kBGRA_8888_SkColorType, kOpaque_SkAlphaType,
+              [](uint8_t red, uint8_t green, uint8_t blue) {
+                return SkPackARGB32(0xFF, red, green, blue);
+              });
+        case FXDIB_Format::kBgra:
+          return CreateSkiaImageFromDib(this, kBGRA_8888_SkColorType,
+                                        kUnpremul_SkAlphaType);
+        case FXDIB_Format::kBgraPremul:
+          return CreateSkiaImageFromDib(this, kBGRA_8888_SkColorType,
+                                        kPremul_SkAlphaType);
+        default:
+          NOTREACHED_NORETURN();
+      }
     default:
       NOTREACHED_NORETURN();
   }
-}
-
-bool CFX_DIBBase::IsPremultiplied() const {
-  return false;
 }

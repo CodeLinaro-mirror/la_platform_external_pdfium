@@ -28,15 +28,16 @@
 #include "fpdfsdk/cpdfsdk_interactiveform.h"
 #include "fpdfsdk/cpdfsdk_pageview.h"
 #include "public/fpdfview.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 #ifdef PDF_ENABLE_XFA
 #include "fpdfsdk/fpdfxfa/cpdfxfa_context.h"
 #include "fpdfsdk/fpdfxfa/cpdfxfa_page.h"
 #endif  // PDF_ENABLE_XFA
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 class SkCanvas;
-#endif  // defined(_SKIA_SUPPORT_)
+#endif  // defined(PDF_USE_SKIA)
 
 #ifdef PDF_ENABLE_XFA
 static_assert(static_cast<int>(AlertButton::kDefault) ==
@@ -174,6 +175,91 @@ CPDFSDK_PageView* FormHandleToPageView(FPDF_FORMHANDLE hHandle,
   CPDFSDK_FormFillEnvironment* pFormFillEnv =
       CPDFSDKFormFillEnvironmentFromFPDFFormHandle(hHandle);
   return pFormFillEnv ? pFormFillEnv->GetOrCreatePageView(pPage) : nullptr;
+}
+
+#if defined(PDF_USE_SKIA)
+using BitmapOrCanvas = absl::variant<CFX_DIBitmap*, SkCanvas*>;
+#else
+using BitmapOrCanvas = absl::variant<CFX_DIBitmap*>;
+#endif
+
+// `dest` must be non-null.
+void FFLCommon(FPDF_FORMHANDLE hHandle,
+               FPDF_PAGE fpdf_page,
+               BitmapOrCanvas dest,
+               int start_x,
+               int start_y,
+               int size_x,
+               int size_y,
+               int rotate,
+               int flags) {
+  if (!hHandle) {
+    return;
+  }
+
+  IPDF_Page* pPage = IPDFPageFromFPDFPage(fpdf_page);
+  if (!pPage) {
+    return;
+  }
+
+  RetainPtr<CFX_DIBitmap> holder;
+#if defined(PDF_USE_SKIA)
+  SkCanvas* canvas = nullptr;
+#endif
+
+  const bool dest_is_bitmap = absl::holds_alternative<CFX_DIBitmap*>(dest);
+  if (dest_is_bitmap) {
+    holder.Reset(absl::get<CFX_DIBitmap*>(dest));
+    CHECK(holder);
+  } else {
+#if defined(PDF_USE_SKIA)
+    if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
+      return;
+    }
+
+    canvas = absl::get<SkCanvas*>(dest);
+    CHECK(canvas);
+#endif
+  }
+
+  CPDF_Document* pPDFDoc = pPage->GetDocument();
+  CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, fpdf_page);
+
+  const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
+  CFX_Matrix matrix = pPage->GetDisplayMatrix(rect, rotate);
+
+  auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
+  if (dest_is_bitmap) {
+    if (!pDevice->AttachWithRgbByteOrder(holder,
+                                         !!(flags & FPDF_REVERSE_BYTE_ORDER))) {
+      return;
+    }
+  } else {
+#if defined(PDF_USE_SKIA)
+    if (!pDevice->AttachCanvas(*canvas)) {
+      return;
+    }
+#endif
+  }
+
+  {
+    CFX_RenderDevice::StateRestorer restorer(pDevice.get());
+    pDevice->SetClip_Rect(rect);
+
+    CPDF_RenderOptions options;
+    options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
+
+    // Grayscale output
+    if (flags & FPDF_GRAYSCALE)
+      options.SetColorMode(CPDF_RenderOptions::kGray);
+
+    options.SetDrawAnnots(flags & FPDF_ANNOT);
+    options.SetOCContext(
+        pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
+
+    if (pPageView)
+      pPageView->PageView_OnDraw(pDevice.get(), matrix, &options, rect);
+  }
 }
 
 // Returns true if formfill version is correctly set. See |version| in
@@ -467,11 +553,13 @@ FORM_GetFocusedText(FPDF_FORMHANDLE hHandle,
                     void* buffer,
                     unsigned long buflen) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pPageView->GetFocusedFormText(),
-                                             buffer, buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pPageView->GetFocusedFormText(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT unsigned long FPDF_CALLCONV
@@ -480,11 +568,13 @@ FORM_GetSelectedText(FPDF_FORMHANDLE hHandle,
                      void* buffer,
                      unsigned long buflen) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return 0;
-
-  return Utf16EncodeMaybeCopyAndReturnLength(pPageView->GetSelectedText(),
-                                             buffer, buflen);
+  }
+  // SAFETY: required from caller.
+  return Utf16EncodeMaybeCopyAndReturnLength(
+      pPageView->GetSelectedText(),
+      UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
 }
 
 FPDF_EXPORT void FPDF_CALLCONV
@@ -492,20 +582,24 @@ FORM_ReplaceAndKeepSelection(FPDF_FORMHANDLE hHandle,
                              FPDF_PAGE page,
                              FPDF_WIDESTRING wsText) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return;
-
-  pPageView->ReplaceAndKeepSelection(WideStringFromFPDFWideString(wsText));
+  }
+  // SAFETY: required from caller.
+  pPageView->ReplaceAndKeepSelection(
+      UNSAFE_BUFFERS(WideStringFromFPDFWideString(wsText)));
 }
 
 FPDF_EXPORT void FPDF_CALLCONV FORM_ReplaceSelection(FPDF_FORMHANDLE hHandle,
                                                      FPDF_PAGE page,
                                                      FPDF_WIDESTRING wsText) {
   CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-  if (!pPageView)
+  if (!pPageView) {
     return;
-
-  pPageView->ReplaceSelection(WideStringFromFPDFWideString(wsText));
+  }
+  // SAFETY: required from caller.
+  pPageView->ReplaceSelection(
+      UNSAFE_BUFFERS(WideStringFromFPDFWideString(wsText)));
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FORM_SelectAllText(FPDF_FORMHANDLE hHandle,
@@ -633,104 +727,75 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDraw(FPDF_FORMHANDLE hHandle,
                                             int size_y,
                                             int rotate,
                                             int flags) {
-  if (!hHandle)
-  return;
-
-  IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
-  if (!pPage)
-  return;
-
-  CPDF_Document* pPDFDoc = pPage->GetDocument();
-  CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
-
-  const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
-  CFX_Matrix matrix = pPage->GetDisplayMatrix(rect, rotate);
-
-  auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
-  #if defined(_SKIA_SUPPORT_)
-  if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
-      pDevice->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
+  CFX_DIBitmap* cbitmap = CFXDIBitmapFromFPDFBitmap(bitmap);
+  if (!cbitmap) {
+    return;
   }
-  #endif
 
-  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
-  pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
-  {
-  CFX_RenderDevice::StateRestorer restorer(pDevice.get());
-  pDevice->SetClip_Rect(rect);
-
-  CPDF_RenderOptions options;
-  options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
-
-  // Grayscale output
-  if (flags & FPDF_GRAYSCALE)
-  options.SetColorMode(CPDF_RenderOptions::kGray);
-
-  options.SetDrawAnnots(flags & FPDF_ANNOT);
-  options.SetOCContext(
-          pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
-
-  if (pPageView)
-      pPageView->PageView_OnDraw(pDevice.get(), matrix, &options, rect);
-  }
+#if defined(PDF_USE_SKIA)
+  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(
+      pdfium::WrapRetain(cbitmap), CFX_DefaultRenderDevice::UseSkiaRenderer());
+#endif
+  FFLCommon(hHandle, page, cbitmap, start_x, start_y, size_x, size_y, rotate,
+            flags);
 }
 
 FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawWithMatrix(FPDF_FORMHANDLE hHandle,
-                                            FPDF_BITMAP bitmap,
-                                            FPDF_PAGE page,
-                                            const FS_MATRIX* matrix,
-                                            const FS_RECTF* clipping,
-                                            int flags) {
-  if (!hHandle)
-  return;
+FPDF_BITMAP bitmap,
+        FPDF_PAGE page,
+const FS_MATRIX* matrix,
+const FS_RECTF* clipping,
+int flags) {
+if (!hHandle)
+return;
 
-  IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
-  if (!pPage)
-  return;
+IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
+if (!pPage)
+return;
 
-  CPDF_Document* pPDFDoc = pPage->GetDocument();
-  CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
+CPDF_Document* pPDFDoc = pPage->GetDocument();
+CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
 
-  CFX_FloatRect clipping_rect;
-  if (clipping)
-  clipping_rect = CFXFloatRectFromFSRectF(*clipping);
-  FX_RECT clip_rect = clipping_rect.ToFxRect();
+CFX_FloatRect clipping_rect;
+if (clipping)
+clipping_rect = CFXFloatRectFromFSRectF(*clipping);
+FX_RECT clip_rect = clipping_rect.ToFxRect();
 
-  const FX_RECT rect(0, 0, pPage->GetPageWidth(), pPage->GetPageHeight());
-  CFX_Matrix transform_matrix = pPage->GetDisplayMatrix(rect, 0);
-  if (matrix)
-      transform_matrix *= CFXMatrixFromFSMatrix(*matrix);
+const FX_RECT rect(0, 0, pPage->GetPageWidth(), pPage->GetPageHeight());
+CFX_Matrix transform_matrix = pPage->GetDisplayMatrix(rect, 0);
+if (matrix)
+transform_matrix *= CFXMatrixFromFSMatrix(*matrix);
 
-  auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
-  #if defined(_SKIA_SUPPORT_)
-  if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
+auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
+#if defined(_SKIA_SUPPORT_)
+if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
       pDevice->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
   }
-  #endif
+#endif
 
-  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
-  pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
-  {
-  CFX_RenderDevice::StateRestorer restorer(pDevice.get());
-  pDevice->SetClip_Rect(clip_rect);
+RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
+pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
+{
+CFX_RenderDevice::StateRestorer restorer(pDevice.get());
+pDevice->SetClip_Rect(clip_rect);
 
-  CPDF_RenderOptions options;
-  options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
+CPDF_RenderOptions options;
+options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
 
-  // Grayscale output
-  if (flags & FPDF_GRAYSCALE)
-  options.SetColorMode(CPDF_RenderOptions::kGray);
+// Grayscale output
+if (flags & FPDF_GRAYSCALE)
+options.SetColorMode(CPDF_RenderOptions::kGray);
 
-  options.SetDrawAnnots(flags & FPDF_ANNOT);
-  options.SetOCContext(
-          pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
+options.SetDrawAnnots(flags & FPDF_ANNOT);
+options.SetOCContext(
+        pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
 
-  if (pPageView)
-      pPageView->PageView_OnDraw(pDevice.get(), transform_matrix, &options, clip_rect);
-  }
+if (pPageView)
+pPageView->PageView_OnDraw(pDevice.get(), transform_matrix, &options, clip_rect);
+}
 }
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawSkia(FPDF_FORMHANDLE hHandle,
                                                 FPDF_SKIA_CANVAS canvas,
                                                 FPDF_PAGE page,
@@ -740,10 +805,15 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawSkia(FPDF_FORMHANDLE hHandle,
                                                 int size_y,
                                                 int rotate,
                                                 int flags) {
-  FFLCommon(hHandle, nullptr, canvas, page, start_x, start_y, size_x, size_y,
-            rotate, flags);
+  SkCanvas* sk_canvas = SkCanvasFromFPDFSkiaCanvas(canvas);
+  if (!sk_canvas) {
+    return;
+  }
+
+  FFLCommon(hHandle, page, sk_canvas, start_x, start_y, size_x, size_y, rotate,
+            flags);
 }
-#endif
+#endif  // defined(PDF_USE_SKIA)
 
 FPDF_EXPORT void FPDF_CALLCONV
 FPDF_SetFormFieldHighlightColor(FPDF_FORMHANDLE hHandle,
@@ -753,7 +823,7 @@ FPDF_SetFormFieldHighlightColor(FPDF_FORMHANDLE hHandle,
   if (!pForm)
     return;
 
-  absl::optional<FormFieldType> cast_input =
+  std::optional<FormFieldType> cast_input =
       CPDF_FormField::IntToFormFieldType(fieldType);
   if (!cast_input.has_value())
     return;

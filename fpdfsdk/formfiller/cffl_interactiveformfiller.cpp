@@ -13,6 +13,7 @@
 #include "constants/form_flags.h"
 #include "core/fpdfapi/page/cpdf_page.h"
 #include "core/fxcrt/autorestorer.h"
+#include "core/fxcrt/check.h"
 #include "core/fxge/cfx_drawutils.h"
 #include "fpdfsdk/cpdfsdk_pageview.h"
 #include "fpdfsdk/cpdfsdk_widget.h"
@@ -25,7 +26,6 @@
 #include "fpdfsdk/formfiller/cffl_radiobutton.h"
 #include "fpdfsdk/formfiller/cffl_textfield.h"
 #include "public/fpdf_fwlevent.h"
-#include "third_party/base/check.h"
 
 CFFL_InteractiveFormFiller::CFFL_InteractiveFormFiller(
     CallbackIface* pCallbackIface)
@@ -896,7 +896,8 @@ bool CFFL_InteractiveFormFiller::IsValidAnnot(const CPDFSDK_PageView* pPageView,
   return pPageView && pPageView->IsValidAnnot(pWidget->GetPDFAnnot());
 }
 
-std::pair<bool, bool> CFFL_InteractiveFormFiller::OnBeforeKeyStroke(
+IPWL_FillerNotify::BeforeKeystrokeResult
+CFFL_InteractiveFormFiller::OnBeforeKeyStroke(
     const IPWL_FillerNotify::PerWindowData* pAttached,
     WideString& strChange,
     const WideString& strChangeEx,

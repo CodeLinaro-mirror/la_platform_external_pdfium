@@ -12,9 +12,9 @@
 #include <memory>
 
 #include "core/fxcrt/data_vector.h"
-#include "third_party/base/memory/ptr_util.h"
-#include "third_party/base/notreached.h"
-#include "third_party/base/numerics/safe_conversions.h"
+#include "core/fxcrt/notreached.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
+#include "core/fxcrt/ptr_util.h"
 
 namespace fxcodec {
 
@@ -56,7 +56,7 @@ IccTransform::~IccTransform() {
 std::unique_ptr<IccTransform> IccTransform::CreateTransformSRGB(
     pdfium::span<const uint8_t> span) {
   ScopedCmsProfile srcProfile(cmsOpenProfileFromMem(
-      span.data(), pdfium::base::checked_cast<cmsUInt32Number>(span.size())));
+      span.data(), pdfium::checked_cast<cmsUInt32Number>(span.size())));
   if (!srcProfile)
     return nullptr;
 
@@ -67,9 +67,9 @@ std::unique_ptr<IccTransform> IccTransform::CreateTransformSRGB(
   cmsColorSpaceSignature srcCS = cmsGetColorSpace(srcProfile.get());
   uint32_t nSrcComponents = cmsChannelsOf(srcCS);
 
-  // According to PDF spec, number of components must be 1, 3, or 4.
-  if (nSrcComponents != 1 && nSrcComponents != 3 && nSrcComponents != 4)
+  if (!IsValidIccComponents(nSrcComponents)) {
     return nullptr;
+  }
 
   int srcFormat;
   bool bLab = false;
@@ -127,7 +127,7 @@ void IccTransform::Translate(pdfium::span<const float> pSrcValues,
   } else {
     DataVector<uint8_t> inputs(std::max<size_t>(pSrcValues.size(), 16));
     for (size_t i = 0; i < pSrcValues.size(); ++i) {
-      inputs[i] = std::clamp(static_cast<int>(pSrcValues[i] * 255.0f), 0, 255);
+      inputs[i] = static_cast<int>(std::clamp(pSrcValues[i] * 255.0f, 0.0f, 255.0f));
     }
     cmsDoTransform(m_hTransform, inputs.data(), output, 1);
   }
@@ -140,6 +140,12 @@ void IccTransform::TranslateScanline(pdfium::span<uint8_t> pDest,
                                      pdfium::span<const uint8_t> pSrc,
                                      int32_t pixels) {
   cmsDoTransform(m_hTransform, pSrc.data(), pDest.data(), pixels);
+}
+
+// static
+bool IccTransform::IsValidIccComponents(int components) {
+  // According to PDF spec, number of components must be 1, 3, or 4.
+  return components == 1 || components == 3 || components == 4;
 }
 
 }  // namespace fxcodec

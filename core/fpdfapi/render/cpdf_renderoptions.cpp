@@ -36,29 +36,38 @@ FX_ARGB CPDF_RenderOptions::TranslateColor(FX_ARGB argb) const {
   if (ColorModeIs(kAlpha))
     return argb;
 
-  int a;
-  int r;
-  int g;
-  int b;
-  std::tie(a, r, g, b) = ArgbDecode(argb);
-  int gray = FXRGB2GRAY(r, g, b);
-  return ArgbEncode(a, gray, gray, gray);
+  const FX_BGRA_STRUCT<uint8_t> bgra = ArgbToBGRAStruct(argb);
+  const int gray = FXRGB2GRAY(bgra.red, bgra.green, bgra.blue);
+  return ArgbEncode(bgra.alpha, gray, gray, gray);
 }
 
-FX_ARGB CPDF_RenderOptions::TranslateObjectColor(
+FX_ARGB CPDF_RenderOptions::TranslateObjectFillColor(
     FX_ARGB argb,
-    CPDF_PageObject::Type object_type,
-    RenderType render_type) const {
-  if (!ColorModeIs(kForcedColor))
+    CPDF_PageObject::Type object_type) const {
+  if (!ColorModeIs(kForcedColor)) {
     return TranslateColor(argb);
-
+  }
   switch (object_type) {
     case CPDF_PageObject::Type::kPath:
-      return render_type == RenderType::kFill ? m_ColorScheme.path_fill_color
-                                              : m_ColorScheme.path_stroke_color;
+      return m_ColorScheme.path_fill_color;
     case CPDF_PageObject::Type::kText:
-      return render_type == RenderType::kFill ? m_ColorScheme.text_fill_color
-                                              : m_ColorScheme.text_stroke_color;
+      return m_ColorScheme.text_fill_color;
+    default:
+      return argb;
+  }
+}
+
+FX_ARGB CPDF_RenderOptions::TranslateObjectStrokeColor(
+    FX_ARGB argb,
+    CPDF_PageObject::Type object_type) const {
+  if (!ColorModeIs(kForcedColor)) {
+    return TranslateColor(argb);
+  }
+  switch (object_type) {
+    case CPDF_PageObject::Type::kPath:
+      return m_ColorScheme.path_stroke_color;
+    case CPDF_PageObject::Type::kText:
+      return m_ColorScheme.text_stroke_color;
     default:
       return argb;
   }

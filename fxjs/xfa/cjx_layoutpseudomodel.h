@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "core/fxcrt/span.h"
 #include "fxjs/xfa/cjx_object.h"
 #include "fxjs/xfa/jse_define.h"
 
@@ -60,14 +61,14 @@ class CJX_LayoutPseudoModel final : public CJX_Object {
   CJS_Result AllPageCount(CFXJSE_Engine* runtime);
   CJS_Result NumberedPageCount(CFXJSE_Engine* runtime);
   CJS_Result DoHWXYInternal(CFXJSE_Engine* runtime,
-                            const std::vector<v8::Local<v8::Value>>& params,
+                            pdfium::span<v8::Local<v8::Value>> params,
                             HWXY layoutModel);
   std::vector<CXFA_Node*> GetObjArray(CXFA_LayoutProcessor* pDocLayout,
                                       int32_t iPageNo,
                                       const WideString& wsType,
                                       bool bOnPageArea);
   CJS_Result PageInternals(CFXJSE_Engine* runtime,
-                           const std::vector<v8::Local<v8::Value>>& params,
+                           pdfium::span<v8::Local<v8::Value>> params,
                            bool bAbsPage);
 };
 

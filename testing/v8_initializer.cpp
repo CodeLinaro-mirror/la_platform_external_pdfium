@@ -4,12 +4,16 @@
 
 #include "testing/v8_initializer.h"
 
-#include <cstring>
+#include <stdlib.h>
 
+#include <cstring>
+#include <vector>
+
+#include "core/fxcrt/fx_memcpy_wrappers.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 #include "public/fpdfview.h"
 #include "testing/utils/file_util.h"
 #include "testing/utils/path_service.h"
-#include "third_party/base/numerics/safe_conversions.h"
 #include "v8/include/libplatform/libplatform.h"
 #include "v8/include/v8-initialization.h"
 #include "v8/include/v8-snapshot.h"
@@ -48,14 +52,16 @@ bool GetExternalData(const std::string& exe_path,
                      v8::StartupData* result_data) {
   std::string full_path =
       GetFullPathForSnapshotFile(exe_path, bin_dir, filename);
-  size_t data_length = 0;
-  std::unique_ptr<char, pdfium::FreeDeleter> data_buffer =
-      GetFileContents(full_path.c_str(), &data_length);
-  if (!data_buffer)
+  std::vector<uint8_t> data_buffer = GetFileContents(full_path.c_str());
+  if (data_buffer.empty()) {
     return false;
+  }
 
-  result_data->data = data_buffer.release();
-  result_data->raw_size = pdfium::base::checked_cast<int>(data_length);
+  // `result_data` takes ownership.
+  void* copy = malloc(data_buffer.size());
+  FXSYS_memcpy(copy, data_buffer.data(), data_buffer.size());
+  result_data->data = static_cast<char*>(copy);
+  result_data->raw_size = pdfium::checked_cast<int>(data_buffer.size());
   return true;
 }
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
