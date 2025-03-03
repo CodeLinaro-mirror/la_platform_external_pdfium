@@ -21,8 +21,8 @@
 // reported with `#error`. This enforcement is best effort, so successfully
 // compiling this header does not guarantee a supported configuration.
 
-#ifndef ABSL_BASE_POLICY_CHECKS_H_
-#define ABSL_BASE_POLICY_CHECKS_H_
+#ifndef POLICY_CHECKS_H_
+#define POLICY_CHECKS_H_
 
 // Included for the __GLIBC_PREREQ macro used below.
 #include <limits.h>

@@ -5,11 +5,14 @@
 #ifndef TESTING_TEST_LOADER_H_
 #define TESTING_TEST_LOADER_H_
 
-#include "third_party/base/containers/span.h"
+#include <stdint.h>
+
+#include "core/fxcrt/raw_span.h"
+#include "core/fxcrt/span.h"
 
 class TestLoader {
  public:
-  explicit TestLoader(pdfium::span<const char> span);
+  explicit TestLoader(pdfium::span<const uint8_t> span);
 
   static int GetBlock(void* param,
                       unsigned long pos,
@@ -17,7 +20,7 @@ class TestLoader {
                       unsigned long size);
 
  private:
-  const pdfium::span<const char> m_Span;
+  const pdfium::raw_span<const uint8_t> m_Span;
 };
 
 #endif  // TESTING_TEST_LOADER_H_

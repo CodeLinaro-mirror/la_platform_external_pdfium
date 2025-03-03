@@ -10,9 +10,10 @@
 
 #include "core/fpdfapi/font/cpdf_cidfont.h"
 #include "core/fpdfapi/font/cpdf_font.h"
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_coordinates.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/span.h"
+#include "core/fxcrt/span.h"
+#include "core/fxcrt/span_util.h"
 
 #define ISLATINWORD(u) (u != 0x20 && u <= 0x28FF)
 
@@ -178,13 +179,13 @@ const CPDF_TextObject* CPDF_TextObject::AsText() const {
 }
 
 CFX_Matrix CPDF_TextObject::GetTextMatrix() const {
-  pdfium::span<const float> pTextMatrix = m_TextState.GetMatrix();
+  pdfium::span<const float> pTextMatrix = text_state().GetMatrix();
   return CFX_Matrix(pTextMatrix[0], pTextMatrix[2], pTextMatrix[1],
                     pTextMatrix[3], m_Pos.x, m_Pos.y);
 }
 
 void CPDF_TextObject::SetTextMatrix(const CFX_Matrix& matrix) {
-  pdfium::span<float> pTextMatrix = m_TextState.GetMutableMatrix();
+  pdfium::span<float> pTextMatrix = mutable_text_state().GetMutableMatrix();
   pTextMatrix[0] = matrix.a;
   pTextMatrix[1] = matrix.c;
   pTextMatrix[2] = matrix.b;
@@ -193,23 +194,23 @@ void CPDF_TextObject::SetTextMatrix(const CFX_Matrix& matrix) {
   CalcPositionDataInternal(GetFont());
 }
 
-void CPDF_TextObject::SetSegments(const ByteString* pStrs,
-                                  const std::vector<float>& kernings,
-                                  size_t nSegs) {
+void CPDF_TextObject::SetSegments(pdfium::span<const ByteString> strings,
+                                  pdfium::span<const float> kernings) {
+  size_t nSegs = strings.size();
   CHECK(nSegs);
   m_CharCodes.clear();
   m_CharPos.clear();
   RetainPtr<CPDF_Font> pFont = GetFont();
   size_t nChars = nSegs - 1;
-  for (size_t i = 0; i < nSegs; ++i)
-    nChars += pFont->CountChar(pStrs[i].AsStringView());
-
+  for (const auto& str : strings) {
+    nChars += pFont->CountChar(str.AsStringView());
+  }
   CHECK(nChars);
   m_CharCodes.resize(nChars);
   m_CharPos.resize(nChars - 1);
   size_t index = 0;
   for (size_t i = 0; i < nSegs; ++i) {
-    ByteStringView segment = pStrs[i].AsStringView();
+    ByteStringView segment = strings[i].AsStringView();
     size_t offset = 0;
     while (offset < segment.GetLength()) {
       DCHECK(index < m_CharCodes.size());
@@ -223,7 +224,7 @@ void CPDF_TextObject::SetSegments(const ByteString* pStrs,
 }
 
 void CPDF_TextObject::SetText(const ByteString& str) {
-  SetSegments(&str, std::vector<float>(), 1);
+  SetSegments(pdfium::span_from_ref(str), pdfium::span<float>());
   CalcPositionDataInternal(GetFont());
   SetDirty(true);
 }
@@ -240,19 +241,19 @@ float CPDF_TextObject::GetCharWidth(uint32_t charcode) const {
 }
 
 RetainPtr<CPDF_Font> CPDF_TextObject::GetFont() const {
-  return m_TextState.GetFont();
+  return text_state().GetFont();
 }
 
 float CPDF_TextObject::GetFontSize() const {
-  return m_TextState.GetFontSize();
+  return text_state().GetFontSize();
 }
 
 TextRenderingMode CPDF_TextObject::GetTextRenderMode() const {
-  return m_TextState.GetTextMode();
+  return text_state().GetTextMode();
 }
 
 void CPDF_TextObject::SetTextRenderMode(TextRenderingMode mode) {
-  m_TextState.SetTextMode(mode);
+  mutable_text_state().SetTextMode(mode);
   SetDirty(true);
 }
 
@@ -291,31 +292,31 @@ float CPDF_TextObject::CalcPositionDataInternal(
       uint16_t cid = pCIDFont->CIDFromCharCode(charcode);
       CFX_Point16 vertical_origin = pCIDFont->GetVertOrigin(cid);
       char_rect.Offset(-vertical_origin.x, -vertical_origin.y);
-      min_x = std::min(
-          min_x, static_cast<float>(std::min(char_rect.left, char_rect.right)));
-      max_x = std::max(
-          max_x, static_cast<float>(std::max(char_rect.left, char_rect.right)));
+      min_x = std::min({min_x, static_cast<float>(char_rect.left),
+                        static_cast<float>(char_rect.right)});
+      max_x = std::max({max_x, static_cast<float>(char_rect.left),
+                        static_cast<float>(char_rect.right)});
       const float char_top = curpos + char_rect.top * fontsize / 1000;
       const float char_bottom = curpos + char_rect.bottom * fontsize / 1000;
-      min_y = std::min(min_y, std::min(char_top, char_bottom));
-      max_y = std::max(max_y, std::max(char_top, char_bottom));
+      min_y = std::min({min_y, char_top, char_bottom});
+      max_y = std::max({max_y, char_top, char_bottom});
       charwidth = pCIDFont->GetVertWidth(cid) * fontsize / 1000;
     } else {
-      min_y = std::min(
-          min_y, static_cast<float>(std::min(char_rect.top, char_rect.bottom)));
-      max_y = std::max(
-          max_y, static_cast<float>(std::max(char_rect.top, char_rect.bottom)));
+      min_y = std::min({min_y, static_cast<float>(char_rect.top),
+                        static_cast<float>(char_rect.bottom)});
+      max_y = std::max({max_y, static_cast<float>(char_rect.top),
+                        static_cast<float>(char_rect.bottom)});
       const float char_left = curpos + char_rect.left * fontsize / 1000;
       const float char_right = curpos + char_rect.right * fontsize / 1000;
-      min_x = std::min(min_x, std::min(char_left, char_right));
-      max_x = std::max(max_x, std::max(char_left, char_right));
+      min_x = std::min({min_x, char_left, char_right});
+      max_x = std::max({max_x, char_left, char_right});
       charwidth = pFont->GetCharWidthF(charcode) * fontsize / 1000;
     }
     curpos += charwidth;
     if (charcode == ' ' && (!pCIDFont || pCIDFont->GetCharSize(' ') == 1))
-      curpos += m_TextState.GetWordSpace();
+      curpos += text_state().GetWordSpace();
 
-    curpos += m_TextState.GetCharSpace();
+    curpos += text_state().GetCharSpace();
   }
 
   if (bVertWriting) {
@@ -328,10 +329,10 @@ float CPDF_TextObject::CalcPositionDataInternal(
 
   SetOriginalRect(CFX_FloatRect(min_x, min_y, max_x, max_y));
   CFX_FloatRect rect = GetTextMatrix().TransformRect(GetOriginalRect());
-  if (TextRenderingModeIsStrokeMode(m_TextState.GetTextMode())) {
+  if (TextRenderingModeIsStrokeMode(text_state().GetTextMode())) {
     // TODO(crbug.com/pdfium/1840): Does the original rect need a similar
     // adjustment?
-    const float half_width = m_GraphState.GetLineWidth() / 2;
+    const float half_width = graph_state().GetLineWidth() / 2;
     rect.Inflate(half_width, half_width);
   }
   SetRect(rect);

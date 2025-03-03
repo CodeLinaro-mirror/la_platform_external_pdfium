@@ -1,9 +1,10 @@
 include_rules = [
-  '+base',
   '+core',
   '+fpdfsdk',
   '+fxjs',
+  '+partition_alloc',
   '+public',
+  '+third_party/skia/include',
   '+v8',
   '+xfa'
 ]

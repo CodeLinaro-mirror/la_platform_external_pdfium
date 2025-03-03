@@ -11,13 +11,14 @@
 #include <vector>
 
 #include "core/fpdftext/cpdf_textpage.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/fx_unicode.h"
+#include "core/fxcrt/ptr_util.h"
 #include "core/fxcrt/stl_util.h"
-#include "third_party/base/check.h"
-#include "third_party/base/memory/ptr_util.h"
 
 namespace {
 
@@ -91,27 +92,31 @@ WideString GetStringCase(const WideString& wsOriginal, bool bMatchCase) {
   return wsLower;
 }
 
-absl::optional<WideString> ExtractSubString(const wchar_t* lpszFullString,
-                                            int iSubString) {
+std::optional<WideString> ExtractSubString(const wchar_t* lpszFullString,
+                                           int iSubString) {
   DCHECK(lpszFullString);
+  UNSAFE_TODO({
+    while (iSubString--) {
+      lpszFullString = wcschr(lpszFullString, L' ');
+      if (!lpszFullString) {
+        return std::nullopt;
+      }
 
-  while (iSubString--) {
-    lpszFullString = wcschr(lpszFullString, L' ');
-    if (!lpszFullString)
-      return absl::nullopt;
-
-    lpszFullString++;
-    while (*lpszFullString == L' ')
       lpszFullString++;
-  }
+      while (*lpszFullString == L' ') {
+        lpszFullString++;
+      }
+    }
 
-  const wchar_t* lpchEnd = wcschr(lpszFullString, L' ');
-  int nLen = lpchEnd ? static_cast<int>(lpchEnd - lpszFullString)
-                     : static_cast<int>(wcslen(lpszFullString));
-  if (nLen < 0)
-    return absl::nullopt;
+    const wchar_t* lpchEnd = wcschr(lpszFullString, L' ');
+    int nLen = lpchEnd ? static_cast<int>(lpchEnd - lpszFullString)
+                       : static_cast<int>(wcslen(lpszFullString));
+    if (nLen < 0) {
+      return std::nullopt;
+    }
 
-  return WideString(lpszFullString, static_cast<size_t>(nLen));
+    return WideString(lpszFullString, static_cast<size_t>(nLen));
+  });
 }
 
 std::vector<WideString> ExtractFindWhat(const WideString& findwhat) {
@@ -129,7 +134,7 @@ std::vector<WideString> ExtractFindWhat(const WideString& findwhat) {
 
   int index = 0;
   while (true) {
-    absl::optional<WideString> word = ExtractSubString(findwhat.c_str(), index);
+    std::optional<WideString> word = ExtractSubString(findwhat.c_str(), index);
     if (!word.has_value())
       break;
 
@@ -176,7 +181,7 @@ std::unique_ptr<CPDF_TextPageFind> CPDF_TextPageFind::Create(
     const CPDF_TextPage* pTextPage,
     const WideString& findwhat,
     const Options& options,
-    absl::optional<size_t> startPos) {
+    std::optional<size_t> startPos) {
   std::vector<WideString> findwhat_array =
       ExtractFindWhat(GetStringCase(findwhat, options.bMatchCase));
   auto find = pdfium::WrapUnique(
@@ -189,7 +194,7 @@ CPDF_TextPageFind::CPDF_TextPageFind(
     const CPDF_TextPage* pTextPage,
     const std::vector<WideString>& findwhat_array,
     const Options& options,
-    absl::optional<size_t> startPos)
+    std::optional<size_t> startPos)
     : m_pTextPage(pTextPage),
       m_strText(GetStringCase(pTextPage->GetAllPageText(), options.bMatchCase)),
       m_csFindWhatArray(findwhat_array),
@@ -214,18 +219,22 @@ bool CPDF_TextPageFind::FindNext() {
   if (m_strText.IsEmpty() || !m_findNextStart.has_value())
     return false;
 
-  size_t strLen = m_strText.GetLength();
-  if (m_findNextStart.value() > strLen - 1)
+  const size_t strLen = m_strText.GetLength();
+  size_t nStartPos = m_findNextStart.value();
+  if (nStartPos >= strLen) {
     return false;
+  }
 
   int nCount = fxcrt::CollectionSize<int>(m_csFindWhatArray);
-  absl::optional<size_t> nResultPos = 0;
-  size_t nStartPos = m_findNextStart.value();
+  std::optional<size_t> nResultPos = 0;
   bool bSpaceStart = false;
   for (int iWord = 0; iWord < nCount; iWord++) {
     WideString csWord = m_csFindWhatArray[iWord];
     if (csWord.IsEmpty()) {
       if (iWord == nCount - 1) {
+        if (nStartPos >= strLen) {
+          return false;
+        }
         wchar_t strInsert = m_strText[nStartPos];
         if (strInsert == L'\n' || strInsert == L' ' || strInsert == L'\r' ||
             strInsert == kNonBreakingSpace) {
@@ -279,8 +288,9 @@ bool CPDF_TextPageFind::FindNext() {
     if (m_options.bMatchWholeWord && bMatch)
       bMatch = IsMatchWholeWord(m_strText, nResultPos.value(), endIndex);
 
-    nStartPos = endIndex + 1;
-    if (!bMatch) {
+    if (bMatch) {
+      nStartPos = endIndex + 1;
+    } else {
       iWord = -1;
       size_t index = bSpaceStart ? 1 : 0;
       nStartPos = m_resStart + m_csFindWhatArray[index].GetLength();

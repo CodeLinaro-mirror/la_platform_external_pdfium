@@ -13,6 +13,8 @@
 #include <wctype.h>
 
 #include "build/build_config.h"
+#include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/widestring.h"
 
 #if defined(USE_SYSTEM_ICUUC)
 #include <unicode/uchar.h>
@@ -24,28 +26,30 @@
 
 #define FX_IsOdd(a) ((a)&1)
 
-float FXSYS_wcstof(const wchar_t* pwsStr, size_t nLength, size_t* pUsedLen);
-wchar_t* FXSYS_wcsncpy(wchar_t* dstStr, const wchar_t* srcStr, size_t count);
-int32_t FXSYS_wcsnicmp(const wchar_t* s1, const wchar_t* s2, size_t count);
+float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen);
+
+UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
+                                           const wchar_t* srcStr,
+                                           size_t count);
 
 inline bool FXSYS_iswlower(int32_t c) {
-  if (__builtin_available(android 31, *)) return u_islower(c);
-  else return iswlower(c);
+    if (__builtin_available(android 31, *)) return u_islower(c);
+    else return iswlower(c);
 }
 
 inline bool FXSYS_iswupper(int32_t c) {
-  if (__builtin_available(android 31, *)) return u_isupper(c);
-  else return iswupper(c);
+    if (__builtin_available(android 31, *)) return u_isupper(c);
+    else return iswupper(c);
 }
 
 inline int32_t FXSYS_towlower(wchar_t c) {
-  if (__builtin_available(android 31, *)) return u_tolower(c);
-  else return towlower(c);
+    if (__builtin_available(android 31, *)) return u_tolower(c);
+    else return towlower(c);
 }
 
 inline int32_t FXSYS_towupper(wchar_t c) {
-  if (__builtin_available(android 31, *)) return u_toupper(c);
-  else return towupper(c);
+    if (__builtin_available(android 31, *)) return u_toupper(c);
+    else return towupper(c);
 }
 
 inline bool FXSYS_IsLowerASCII(int32_t c) {
@@ -61,18 +65,18 @@ inline char FXSYS_ToUpperASCII(char c) {
 }
 
 inline bool FXSYS_iswalpha(wchar_t c) {
-  if (__builtin_available(android 31, *)) return u_isalpha(c);
-  else return iswalpha(c);
+    if (__builtin_available(android 31, *)) return u_isalpha(c);
+    else return iswalpha(c);
 }
 
 inline bool FXSYS_iswalnum(wchar_t c) {
-  if (__builtin_available(android 31, *)) return u_isalnum(c);
-  else return iswalnum(c);
+    if (__builtin_available(android 31, *)) return u_isalnum(c);
+    else return iswalnum(c);
 }
 
 inline bool FXSYS_iswspace(wchar_t c) {
-  if (__builtin_available(android 31, *)) return u_isspace(c);
-  else return iswspace(c);
+    if (__builtin_available(android 31, *)) return u_isspace(c);
+    else return iswspace(c);
 }
 
 inline bool FXSYS_IsOctalDigit(char c) {

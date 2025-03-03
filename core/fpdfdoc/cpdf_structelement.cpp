@@ -16,7 +16,7 @@
 #include "core/fpdfapi/parser/cpdf_reference.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfdoc/cpdf_structtree.h"
-#include "third_party/base/check.h"
+#include "core/fxcrt/check.h"
 
 CPDF_StructElement::Kid::Kid() = default;
 
@@ -56,17 +56,17 @@ WideString CPDF_StructElement::GetTitle() const {
   return m_pDict->GetUnicodeTextFor("T");
 }
 
-absl::optional<WideString> CPDF_StructElement::GetID() const {
+std::optional<WideString> CPDF_StructElement::GetID() const {
   RetainPtr<const CPDF_Object> obj = m_pDict->GetObjectFor("ID");
   if (!obj || !obj->IsString())
-    return absl::nullopt;
+    return std::nullopt;
   return obj->GetUnicodeText();
 }
 
-absl::optional<WideString> CPDF_StructElement::GetLang() const {
+std::optional<WideString> CPDF_StructElement::GetLang() const {
   RetainPtr<const CPDF_Object> obj = m_pDict->GetObjectFor("Lang");
   if (!obj || !obj->IsString())
-    return absl::nullopt;
+    return std::nullopt;
   return obj->GetUnicodeText();
 }
 
@@ -85,6 +85,13 @@ size_t CPDF_StructElement::CountKids() const {
 CPDF_StructElement* CPDF_StructElement::GetKidIfElement(size_t index) const {
   return m_Kids[index].m_Type == Kid::kElement ? m_Kids[index].m_pElement.Get()
                                                : nullptr;
+}
+
+int CPDF_StructElement::GetKidContentId(size_t index) const {
+  return m_Kids[index].m_Type == Kid::kStreamContent ||
+                 m_Kids[index].m_Type == Kid::kPageContent
+             ? m_Kids[index].m_ContentId
+             : -1;
 }
 
 bool CPDF_StructElement::UpdateKidIfElement(const CPDF_Dictionary* pDict,
