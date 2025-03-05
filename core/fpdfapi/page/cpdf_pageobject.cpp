@@ -76,27 +76,33 @@ const CPDF_FormObject* CPDF_PageObject::AsForm() const {
 }
 
 pdfium::span<const ByteString> CPDF_PageObject::GetGraphicsResourceNames()
-  const {
-  return m_GeneralState.GetGraphicsResourceNames();
+    const {
+  return general_state().GetGraphicsResourceNames();
+}
+
+void CPDF_PageObject::SetDefaultStates() {
+  m_GraphicStates.SetDefaultStates();
 }
 
 void CPDF_PageObject::CopyData(const CPDF_PageObject* pSrc) {
-  CopyStates(*pSrc);
+  m_GraphicStates = pSrc->m_GraphicStates;
   m_Rect = pSrc->m_Rect;
   m_bDirty = true;
 }
 
-void CPDF_PageObject::TransformClipPath(const CFX_Matrix& matrix) {
-  if (!m_ClipPath.HasRef())
-    return;
-  m_ClipPath.Transform(matrix);
-  SetDirty(true);
+void CPDF_PageObject::SetIsActive(bool value) {
+  if (m_bIsActive != value) {
+    m_bIsActive = value;
+    m_bDirty = true;
+  }
 }
 
-void CPDF_PageObject::TransformGeneralState(const CFX_Matrix& matrix) {
-  if (!m_GeneralState.HasRef())
+void CPDF_PageObject::TransformClipPath(const CFX_Matrix& matrix) {
+  CPDF_ClipPath& clip_path = mutable_clip_path();
+  if (!clip_path.HasRef()) {
     return;
-  m_GeneralState.GetMutableMatrix()->Concat(matrix);
+  }
+  clip_path.Transform(matrix);
   SetDirty(true);
 }
 

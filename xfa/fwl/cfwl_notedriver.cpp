@@ -22,6 +22,8 @@
 #include "xfa/fwl/cfwl_widgetmgr.h"
 #include "xfa/fwl/fwl_widgetdef.h"
 
+namespace pdfium {
+
 namespace {
 
 uint64_t g_next_listener_key = 1;
@@ -34,10 +36,10 @@ CFWL_NoteDriver::~CFWL_NoteDriver() = default;
 
 void CFWL_NoteDriver::Trace(cppgc::Visitor* visitor) const {
   visitor->Trace(m_pApp);
-  ContainerTrace(visitor, m_eventTargets);
   visitor->Trace(m_pHover);
   visitor->Trace(m_pFocus);
   visitor->Trace(m_pGrab);
+  ContainerTrace(visitor, m_eventTargets);
 }
 
 void CFWL_NoteDriver::SendEvent(CFWL_Event* pNote) {
@@ -274,3 +276,5 @@ bool CFWL_NoteDriver::Target::ProcessEvent(CFWL_Event* pEvent) {
   pDelegate->OnProcessEvent(pEvent);
   return true;
 }
+
+}  // namespace pdfium

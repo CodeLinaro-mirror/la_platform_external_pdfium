@@ -22,6 +22,8 @@
 #include "core/fpdfdoc/cpdf_formfield.h"
 #include "core/fpdfdoc/cpdf_iconfit.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
 #include "core/fxge/cfx_path.h"
@@ -32,8 +34,6 @@
 #include "fpdfsdk/cpdfsdk_pageview.h"
 #include "fpdfsdk/formfiller/cffl_fieldaction.h"
 #include "fpdfsdk/pwl/cpwl_edit.h"
-#include "third_party/base/check.h"
-#include "third_party/base/notreached.h"
 
 #ifdef PDF_ENABLE_XFA
 #include "fpdfsdk/fpdfxfa/cpdfxfa_context.h"
@@ -224,8 +224,7 @@ bool CPDFSDK_Widget::OnXFAAAction(PDFSDK_XFAAActionType eXFAAAT,
   if (!pXFAWidgetHandler)
     return false;
 
-  CXFA_EventParam param;
-  param.m_eType = eEventType;
+  CXFA_EventParam param(eEventType);
   param.m_wsChange = data->sChange;
   param.m_iCommitKey = 0;
   param.m_bShift = data->bShift;
@@ -320,8 +319,7 @@ bool CPDFSDK_Widget::HandleXFAAAction(
   if (!pXFAWidgetHandler)
     return false;
 
-  CXFA_EventParam param;
-  param.m_eType = eEventType;
+  CXFA_EventParam param(eEventType);
   param.m_wsChange = data->sChange;
   param.m_iCommitKey = 0;
   param.m_bShift = data->bShift;
@@ -439,35 +437,35 @@ WideString CPDFSDK_Widget::GetName() const {
 }
 #endif  // PDF_ENABLE_XFA
 
-absl::optional<FX_COLORREF> CPDFSDK_Widget::GetFillColor() const {
+std::optional<FX_COLORREF> CPDFSDK_Widget::GetFillColor() const {
   CFX_Color::TypeAndARGB type_argb_pair =
       GetFormControl()->GetColorARGB(pdfium::appearance::kBG);
 
   if (type_argb_pair.color_type == CFX_Color::Type::kTransparent)
-    return absl::nullopt;
+    return std::nullopt;
 
   return ArgbToColorRef(type_argb_pair.argb);
 }
 
-absl::optional<FX_COLORREF> CPDFSDK_Widget::GetBorderColor() const {
+std::optional<FX_COLORREF> CPDFSDK_Widget::GetBorderColor() const {
   CFX_Color::TypeAndARGB type_argb_pair =
       GetFormControl()->GetColorARGB(pdfium::appearance::kBC);
   if (type_argb_pair.color_type == CFX_Color::Type::kTransparent)
-    return absl::nullopt;
+    return std::nullopt;
 
   return ArgbToColorRef(type_argb_pair.argb);
 }
 
-absl::optional<FX_COLORREF> CPDFSDK_Widget::GetTextColor() const {
+std::optional<FX_COLORREF> CPDFSDK_Widget::GetTextColor() const {
   CPDF_DefaultAppearance da = GetFormControl()->GetDefaultAppearance();
-  absl::optional<CFX_Color::TypeAndARGB> maybe_type_argb_pair =
+  std::optional<CFX_Color::TypeAndARGB> maybe_type_argb_pair =
       da.GetColorARGB();
 
   if (!maybe_type_argb_pair.has_value())
-    return absl::nullopt;
+    return std::nullopt;
 
   if (maybe_type_argb_pair.value().color_type == CFX_Color::Type::kTransparent)
-    return absl::nullopt;
+    return std::nullopt;
 
   return ArgbToColorRef(maybe_type_argb_pair.value().argb);
 }
@@ -639,13 +637,13 @@ void CPDFSDK_Widget::ResetXFAAppearance(ValueChanged bValueChanged) {
       break;
     }
     default:
-      ResetAppearance(absl::nullopt, kValueUnchanged);
+      ResetAppearance(std::nullopt, kValueUnchanged);
       break;
   }
 }
 #endif  // PDF_ENABLE_XFA
 
-void CPDFSDK_Widget::ResetAppearance(absl::optional<WideString> sValue,
+void CPDFSDK_Widget::ResetAppearance(std::optional<WideString> sValue,
                                      ValueChanged bValueChanged) {
   SetAppModified();
 
@@ -680,7 +678,7 @@ void CPDFSDK_Widget::ResetAppearance(absl::optional<WideString> sValue,
   ClearCachedAnnotAP();
 }
 
-absl::optional<WideString> CPDFSDK_Widget::OnFormat() {
+std::optional<WideString> CPDFSDK_Widget::OnFormat() {
   CPDF_FormField* pFormField = GetFormField();
   DCHECK(pFormField);
   return m_pInteractiveForm->OnFormat(pFormField);
@@ -689,7 +687,7 @@ absl::optional<WideString> CPDFSDK_Widget::OnFormat() {
 void CPDFSDK_Widget::ResetFieldAppearance() {
   CPDF_FormField* pFormField = GetFormField();
   DCHECK(pFormField);
-  m_pInteractiveForm->ResetFieldAppearance(pFormField, absl::nullopt);
+  m_pInteractiveForm->ResetFieldAppearance(pFormField, std::nullopt);
 }
 
 void CPDFSDK_Widget::OnDraw(CFX_RenderDevice* pDevice,
@@ -713,7 +711,8 @@ bool CPDFSDK_Widget::DoHitTest(const CFX_PointF& point) {
 
   bool do_hit_test = GetFieldType() == FormFieldType::kPushButton;
   if (!do_hit_test) {
-    uint32_t perms = GetPDFPage()->GetDocument()->GetUserPermissions();
+    uint32_t perms = GetPDFPage()->GetDocument()->GetUserPermissions(
+        /*get_owner_perms=*/true);
     do_hit_test = (perms & pdfium::access_permissions::kFillForm) ||
                   (perms & pdfium::access_permissions::kModifyAnnotation);
   }
@@ -917,7 +916,7 @@ void CPDFSDK_Widget::DrawAppearance(CFX_RenderDevice* pDevice,
       mode == CPDF_Annot::AppearanceMode::kNormal &&
       !IsWidgetAppearanceValid(CPDF_Annot::AppearanceMode::kNormal)) {
     CFX_GraphStateData gsd;
-    gsd.m_LineWidth = 0.0f;
+    gsd.set_line_width(0.0f);
 
     CFX_Path path;
     path.AppendFloatRect(GetRect());
@@ -1022,7 +1021,7 @@ CFX_Matrix CPDFSDK_Widget::GetMatrix() const {
 
 CFX_Color CPDFSDK_Widget::GetTextPWLColor() const {
   CPDF_FormControl* pFormCtrl = GetFormControl();
-  absl::optional<CFX_Color> crText =
+  std::optional<CFX_Color> crText =
       pFormCtrl->GetDefaultAppearance().GetColor();
   return crText.value_or(CFX_Color(CFX_Color::Type::kGray, 0));
 }
@@ -1055,29 +1054,31 @@ bool CPDFSDK_Widget::OnAAction(CPDF_AAction::AActionType type,
 }
 
 void CPDFSDK_Widget::OnLoad() {
-  if (IsSignatureWidget())
+  ObservedPtr<CPDFSDK_Widget> pObserved(this);
+  if (pObserved->IsSignatureWidget()) {
     return;
-
-  if (!IsAppearanceValid())
-    ResetAppearance(absl::nullopt, CPDFSDK_Widget::kValueUnchanged);
-
-  FormFieldType field_type = GetFieldType();
+  }
+  if (!pObserved->IsAppearanceValid()) {
+    pObserved->ResetAppearance(std::nullopt, CPDFSDK_Widget::kValueUnchanged);
+  }
+  FormFieldType field_type = pObserved->GetFieldType();
   if (field_type == FormFieldType::kTextField ||
       field_type == FormFieldType::kComboBox) {
-    ObservedPtr<CPDFSDK_Annot> pObserved(this);
-    absl::optional<WideString> sValue = OnFormat();
-    if (!pObserved)
+    std::optional<WideString> sValue = pObserved->OnFormat();
+    if (!pObserved) {
       return;
-
-    if (sValue.has_value() && field_type == FormFieldType::kComboBox)
-      ResetAppearance(sValue, CPDFSDK_Widget::kValueUnchanged);
+    }
+    if (sValue.has_value() && field_type == FormFieldType::kComboBox) {
+      pObserved->ResetAppearance(sValue, CPDFSDK_Widget::kValueUnchanged);
+    }
   }
-
 #ifdef PDF_ENABLE_XFA
-  auto* pContext = GetPageView()->GetFormFillEnv()->GetDocExtension();
+  auto* pContext =
+      pObserved->GetPageView()->GetFormFillEnv()->GetDocExtension();
   if (pContext && pContext->ContainsExtensionForegroundForm()) {
-    if (!IsAppearanceValid() && !GetValue().IsEmpty())
-      ResetXFAAppearance(CPDFSDK_Widget::kValueUnchanged);
+    if (!pObserved->IsAppearanceValid() && !pObserved->GetValue().IsEmpty()) {
+      pObserved->ResetXFAAppearance(CPDFSDK_Widget::kValueUnchanged);
+    }
   }
 #endif  // PDF_ENABLE_XFA
 }

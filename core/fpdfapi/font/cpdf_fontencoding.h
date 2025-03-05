@@ -7,10 +7,14 @@
 #ifndef CORE_FPDFAPI_FONT_CPDF_FONTENCODING_H_
 #define CORE_FPDFAPI_FONT_CPDF_FONTENCODING_H_
 
+#include <array>
+
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/string_pool_template.h"
 #include "core/fxcrt/weak_ptr.h"
+#include "core/fxge/fx_fontencoding.h"
 
 enum class FontEncoding {
   kBuiltin = 0,
@@ -24,10 +28,13 @@ enum class FontEncoding {
   kMsSymbol = 8,
 };
 
-uint32_t CharCodeFromUnicodeForFreetypeEncoding(int encoding, wchar_t unicode);
+uint32_t CharCodeFromUnicodeForEncoding(fxge::FontEncoding encoding,
+                                        wchar_t unicode);
+
 wchar_t UnicodeFromAppleRomanCharCode(uint8_t charcode);
 
-const uint16_t* UnicodesForPredefinedCharSet(FontEncoding encoding);
+pdfium::span<const uint16_t> UnicodesForPredefinedCharSet(
+    FontEncoding encoding);
 const char* CharNameFromPredefinedCharSet(FontEncoding encoding,
                                           uint8_t charcode);
 
@@ -53,7 +60,7 @@ class CPDF_FontEncoding {
   RetainPtr<CPDF_Object> Realize(WeakPtr<ByteStringPool> pPool) const;
 
  private:
-  wchar_t m_Unicodes[kEncodingTableSize] = {};
+  std::array<wchar_t, kEncodingTableSize> m_Unicodes = {};
 };
 
 #endif  // CORE_FPDFAPI_FONT_CPDF_FONTENCODING_H_

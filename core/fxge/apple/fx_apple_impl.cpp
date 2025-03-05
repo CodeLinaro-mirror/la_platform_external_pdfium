@@ -11,9 +11,10 @@
 
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_system.h"
-#include "core/fxge/agg/fx_agg_driver.h"
+#include "core/fxcrt/span.h"
+#include "core/fxge/agg/cfx_agg_cliprgn.h"
+#include "core/fxge/agg/cfx_agg_devicedriver.h"
 #include "core/fxge/apple/fx_apple_platform.h"
-#include "core/fxge/cfx_cliprgn.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/cfx_gemodule.h"
 #include "core/fxge/cfx_glyphbitmap.h"
@@ -21,9 +22,7 @@
 #include "core/fxge/cfx_renderdevice.h"
 #include "core/fxge/cfx_substfont.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "core/fxge/freetype/fx_freetype.h"
 #include "core/fxge/text_char_pos.h"
-#include "third_party/base/containers/span.h"
 
 namespace {
 
@@ -104,7 +103,7 @@ bool CFX_AggDeviceDriver::DrawDeviceText(
     CFX_Font* pFont,
     const CFX_Matrix& mtObject2Device,
     float font_size,
-    uint32_t argb,
+    uint32_t color,
     const CFX_TextRenderOptions& /*options*/) {
   if (!pFont)
     return false;
@@ -151,8 +150,15 @@ bool CFX_AggDeviceDriver::DrawDeviceText(
   else
     CGContextClipToRect(ctx, rect_cg);
 
+  if (m_bRgbByteOrder) {
+    uint8_t a = FXARGB_A(color);
+    uint8_t r = FXARGB_R(color);
+    uint8_t g = FXARGB_G(color);
+    uint8_t b = FXARGB_B(color);
+    color = ArgbEncode(a, b, g, r);
+  }
   bool ret =
-      CGDrawGlyphRun(ctx, pCharPos, pFont, mtObject2Device, font_size, argb);
+      CGDrawGlyphRun(ctx, pCharPos, pFont, mtObject2Device, font_size, color);
   if (pImageCG)
     CGImageRelease(pImageCG);
   CGContextRestoreGState(ctx);

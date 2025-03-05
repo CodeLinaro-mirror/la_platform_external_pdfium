@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include <array>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -21,8 +22,9 @@
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/observed_ptr.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
-#include "third_party/base/containers/span.h"
+#include "core/fxge/dib/fx_dib.h"
 
 class CPDF_Document;
 class CPDF_IndexedCS;
@@ -37,11 +39,7 @@ class PatternValue {
   ~PatternValue();
 
   void SetComps(pdfium::span<const float> comps);
-  pdfium::span<const float> GetComps() const {
-    // TODO(tsepez): update span.h from base for implicit std::array ctor.
-    return {m_Comps.data(), m_Comps.size()};
-  }
-
+  pdfium::span<const float> GetComps() const { return m_Comps; }
   RetainPtr<CPDF_Pattern> GetPattern() const { return m_pRetainedPattern; }
   void SetPattern(RetainPtr<CPDF_Pattern> pPattern) {
     m_pRetainedPattern = std::move(pPattern);
@@ -49,7 +47,7 @@ class PatternValue {
 
  private:
   RetainPtr<CPDF_Pattern> m_pRetainedPattern;
-  std::array<float, kMaxPatternColorComps> m_Comps{};
+  std::array<float, kMaxPatternColorComps> m_Comps = {};
 };
 
 class CPDF_ColorSpace : public Retainable, public Observable {
@@ -69,6 +67,14 @@ class CPDF_ColorSpace : public Retainable, public Observable {
     kPattern = 11,
   };
 
+  static void InitializeGlobals();
+  static void DestroyGlobals();
+
+  // `family` must be one of the following:
+  // - `kDeviceGray`
+  // - `kDeviceRGB`
+  // - `kDeviceCMYK`
+  // - `kPattern`
   static RetainPtr<CPDF_ColorSpace> GetStockCS(Family family);
   static RetainPtr<CPDF_ColorSpace> GetStockCSForName(const ByteString& name);
   static RetainPtr<CPDF_ColorSpace> Load(
@@ -81,12 +87,11 @@ class CPDF_ColorSpace : public Retainable, public Observable {
       uint32_t family_id);
 
   static uint32_t ComponentsForFamily(Family family);
-  static bool IsValidIccComponents(int components);
 
   // Should only be called if this colorspace is not a pattern.
   std::vector<float> CreateBufAndSetDefaultColor() const;
 
-  uint32_t CountComponents() const;
+  uint32_t ComponentCount() const;
   Family GetFamily() const { return m_Family; }
   bool IsSpecial() const {
     return GetFamily() == Family::kSeparation ||
@@ -94,11 +99,16 @@ class CPDF_ColorSpace : public Retainable, public Observable {
            GetFamily() == Family::kPattern;
   }
 
-  // Use CPDF_Pattern::GetPatternRGB() instead of GetRGB() for patterns.
-  virtual bool GetRGB(pdfium::span<const float> pBuf,
-                      float* R,
-                      float* G,
-                      float* B) const = 0;
+  // Wrapper around GetRGB() that returns black (0, 0, 0) when an actual value
+  // can not be determined.
+  FX_RGB_STRUCT<float> GetRGBOrZerosOnError(
+      pdfium::span<const float> pBuf) const {
+    return GetRGB(pBuf).value_or(FX_RGB_STRUCT<float>{});
+  }
+
+  // Use CPDF_Pattern::GetPatternColorRef() instead of GetRGB() for patterns.
+  virtual std::optional<FX_RGB_STRUCT<float>> GetRGB(
+      pdfium::span<const float> pBuf) const = 0;
 
   virtual void GetDefaultValue(int iComponent,
                                float* value,
@@ -137,8 +147,8 @@ class CPDF_ColorSpace : public Retainable, public Observable {
   bool HasSameArray(const CPDF_Object* pObj) const { return m_pArray == pObj; }
 
  private:
-  friend class CPDF_CalGray_TranslateImageLine_Test;
-  friend class CPDF_CalRGB_TranslateImageLine_Test;
+  friend class CPDFCalGrayTest_TranslateImageLine_Test;
+  friend class CPDFCalRGBTest_TranslateImageLine_Test;
 
   static RetainPtr<CPDF_ColorSpace> AllocateColorSpace(
       ByteStringView bsFamilyName);

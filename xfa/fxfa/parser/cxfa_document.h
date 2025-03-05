@@ -12,13 +12,13 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxcrt/widestring.h"
 #include "fxjs/gc/heap.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
 #include "v8/include/cppgc/garbage-collected.h"
 #include "v8/include/cppgc/member.h"
 #include "v8/include/cppgc/persistent.h"
@@ -146,9 +146,9 @@ class CXFA_Document final : public cppgc::GarbageCollected<CXFA_Document> {
   void SetPendingNodesUnusedAndUnbound();
 
  private:
-  friend class CXFA_DocumentTest_ParseXFAVersion_Test;
-  friend class CXFA_DocumentTest_ParseUseHref_Test;
-  friend class CXFA_DocumentTest_ParseUse_Test;
+  friend class CXFADocumentTest_ParseXFAVersion_Test;
+  friend class CXFADocumentTest_ParseUseHref_Test;
+  friend class CXFADocumentTest_ParseUse_Test;
 
   static XFA_VERSION ParseXFAVersion(const WideString& wsTemplateNS);
   static void ParseUseHref(const WideString& wsUseVal,
@@ -164,10 +164,10 @@ class CXFA_Document final : public cppgc::GarbageCollected<CXFA_Document> {
                 LayoutProcessorIface* pLayout);
 
   UnownedPtr<cppgc::Heap> heap_;
+  std::unique_ptr<CFXJSE_Engine> m_pScriptContext;
   cppgc::Member<CXFA_FFNotify> const notify_;
   cppgc::Member<CXFA_NodeOwner> const node_owner_;
   cppgc::Member<CXFA_Node> m_pRootNode;
-  std::unique_ptr<CFXJSE_Engine> m_pScriptContext;
   cppgc::Member<LayoutProcessorIface> m_pLayoutProcessor;
   cppgc::Member<CXFA_LocaleMgr> m_pLocaleMgr;
   cppgc::Member<CScript_DataWindow> m_pScriptDataWindow;
@@ -179,7 +179,7 @@ class CXFA_Document final : public cppgc::GarbageCollected<CXFA_Document> {
   std::map<uint32_t, cppgc::Member<CXFA_Node>> m_rgGlobalBinding;
   std::vector<cppgc::Member<CXFA_Node>> m_pPendingPageSet;
   XFA_VERSION m_eCurVersionMode = XFA_VERSION_DEFAULT;
-  absl::optional<bool> m_Interactive;
+  std::optional<bool> m_Interactive;
   bool m_bStrictScoping = false;
   bool m_bScripting = false;
 };
