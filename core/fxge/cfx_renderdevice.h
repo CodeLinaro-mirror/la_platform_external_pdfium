@@ -13,18 +13,18 @@
 #include "build/build_config.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "core/fxge/render_defines.h"
 #include "core/fxge/renderdevicedriver_iface.h"
-#include "third_party/base/containers/span.h"
 
+class CFX_AggImageRenderer;
 class CFX_DIBBase;
 class CFX_DIBitmap;
 class CFX_Font;
 class CFX_GraphStateData;
-class CFX_ImageRenderer;
 class PauseIndicatorIface;
 class TextCharPos;
 struct CFX_Color;
@@ -62,11 +62,11 @@ class CFX_RenderDevice {
   DeviceType GetDeviceType() const { return m_DeviceType; }
   int GetRenderCaps() const { return m_RenderCaps; }
   int GetDeviceCaps(int id) const;
-  RetainPtr<CFX_DIBitmap> GetBitmap() const;
-  void SetBitmap(const RetainPtr<CFX_DIBitmap>& pBitmap);
-  bool CreateCompatibleBitmap(const RetainPtr<CFX_DIBitmap>& pDIB,
-                              int width,
-                              int height) const;
+  RetainPtr<CFX_DIBitmap> GetBitmap();
+  RetainPtr<const CFX_DIBitmap> GetBitmap() const;
+  [[nodiscard]] bool CreateCompatibleBitmap(const RetainPtr<CFX_DIBitmap>& pDIB,
+                                            int width,
+                                            int height) const;
   const FX_RECT& GetClipBox() const { return m_ClipBox; }
   void SetBaseClip(const FX_RECT& rect);
   bool SetClip_PathFill(const CFX_Path& path,
@@ -82,76 +82,59 @@ class CFX_RenderDevice {
                 uint32_t fill_color,
                 uint32_t stroke_color,
                 const CFX_FillRenderOptions& fill_options);
-  bool DrawPathWithBlend(const CFX_Path& path,
-                         const CFX_Matrix* pObject2Device,
-                         const CFX_GraphStateData* pGraphState,
-                         uint32_t fill_color,
-                         uint32_t stroke_color,
-                         const CFX_FillRenderOptions& fill_options,
-                         BlendMode blend_type);
-  bool FillRect(const FX_RECT& rect, uint32_t color) {
-    return FillRectWithBlend(rect, color, BlendMode::kNormal);
-  }
+  bool FillRect(const FX_RECT& rect, uint32_t color);
 
-  RetainPtr<CFX_DIBitmap> GetBackDrop();
-  bool GetDIBits(const RetainPtr<CFX_DIBitmap>& pBitmap, int left, int top);
-  bool SetDIBits(const RetainPtr<CFX_DIBBase>& pBitmap, int left, int top) {
-    return SetDIBitsWithBlend(pBitmap, left, top, BlendMode::kNormal);
-  }
-  bool SetDIBitsWithBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
+  RetainPtr<const CFX_DIBitmap> GetBackDrop() const;
+  bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap, int left, int top) const;
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap, int left, int top);
+  bool SetDIBitsWithBlend(RetainPtr<const CFX_DIBBase> bitmap,
                           int left,
                           int top,
                           BlendMode blend_mode);
-  bool StretchDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                      int left,
                      int top,
                      int dest_width,
-                     int dest_height) {
-    return StretchDIBitsWithFlagsAndBlend(pBitmap, left, top, dest_width,
-                                          dest_height, FXDIB_ResampleOptions(),
-                                          BlendMode::kNormal);
-  }
-  bool StretchDIBitsWithFlagsAndBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
+                     int dest_height);
+  bool StretchDIBitsWithFlagsAndBlend(RetainPtr<const CFX_DIBBase> bitmap,
                                       int left,
                                       int top,
                                       int dest_width,
                                       int dest_height,
                                       const FXDIB_ResampleOptions& options,
                                       BlendMode blend_mode);
-  bool SetBitMask(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool SetBitMask(RetainPtr<const CFX_DIBBase> bitmap,
                   int left,
                   int top,
                   uint32_t argb);
-  bool StretchBitMask(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool StretchBitMask(RetainPtr<CFX_DIBBase> bitmap,
                       int left,
                       int top,
                       int dest_width,
                       int dest_height,
                       uint32_t color);
-  bool StretchBitMaskWithFlags(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool StretchBitMaskWithFlags(RetainPtr<CFX_DIBBase> bitmap,
                                int left,
                                int top,
                                int dest_width,
                                int dest_height,
                                uint32_t argb,
                                const FXDIB_ResampleOptions& options);
-  bool StartDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
-                   int bitmap_alpha,
-                   uint32_t color,
-                   const CFX_Matrix& matrix,
-                   const FXDIB_ResampleOptions& options,
-                   std::unique_ptr<CFX_ImageRenderer>* handle) {
-    return StartDIBitsWithBlend(pBitmap, bitmap_alpha, color, matrix, options,
-                                handle, BlendMode::kNormal);
-  }
-  bool StartDIBitsWithBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
-                            int bitmap_alpha,
-                            uint32_t argb,
-                            const CFX_Matrix& matrix,
-                            const FXDIB_ResampleOptions& options,
-                            std::unique_ptr<CFX_ImageRenderer>* handle,
-                            BlendMode blend_mode);
-  bool ContinueDIBits(CFX_ImageRenderer* handle, PauseIndicatorIface* pPause);
+  RenderDeviceDriverIface::StartResult StartDIBits(
+      RetainPtr<const CFX_DIBBase> bitmap,
+      float alpha,
+      uint32_t argb,
+      const CFX_Matrix& matrix,
+      const FXDIB_ResampleOptions& options);
+  RenderDeviceDriverIface::StartResult StartDIBitsWithBlend(
+      RetainPtr<const CFX_DIBBase> bitmap,
+      float alpha,
+      uint32_t argb,
+      const CFX_Matrix& matrix,
+      const FXDIB_ResampleOptions& options,
+      BlendMode blend_mode);
+  bool ContinueDIBits(CFX_AggImageRenderer* handle,
+                      PauseIndicatorIface* pPause);
 
   bool DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
                       CFX_Font* pFont,
@@ -202,29 +185,29 @@ class CFX_RenderDevice {
                   int32_t nTransparency,
                   int32_t nStartGray,
                   int32_t nEndGray);
-  bool DrawShading(const CPDF_ShadingPattern* pPattern,
-                   const CFX_Matrix* pMatrix,
-                   const FX_RECT& clip_rect,
-                   int alpha,
-                   bool bAlphaMode);
 
-  // Multiplies the device by a constant alpha, returning `true` on success.
+  // See RenderDeviceDriverIface methods of the same name.
   bool MultiplyAlpha(float alpha);
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask);
 
-  // Multiplies the device by an alpha mask, returning `true` on success.
-  bool MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask);
-
-#if defined(_SKIA_SUPPORT_)
-  bool SetBitsWithMask(const RetainPtr<CFX_DIBBase>& pBitmap,
-                       const RetainPtr<CFX_DIBBase>& pMask,
+#if defined(PDF_USE_SKIA)
+  bool DrawShading(const CPDF_ShadingPattern& pattern,
+                   const CFX_Matrix& matrix,
+                   const FX_RECT& clip_rect,
+                   int alpha);
+  bool SetBitsWithMask(RetainPtr<const CFX_DIBBase> bitmap,
+                       RetainPtr<const CFX_DIBBase> mask,
                        int left,
                        int top,
-                       int bitmap_alpha,
+                       float alpha,
                        BlendMode blend_type);
-#endif
+  void SyncInternalBitmaps();
+#endif  // defined(PDF_USE_SKIA)
 
  protected:
   CFX_RenderDevice();
+
+  void SetBitmap(RetainPtr<CFX_DIBitmap> bitmap);
 
   void SetDeviceDriver(std::unique_ptr<RenderDeviceDriverIface> pDriver);
   RenderDeviceDriverIface* GetDeviceDriver() const {
@@ -239,23 +222,17 @@ class CFX_RenderDevice {
                           const CFX_GraphStateData* pGraphState,
                           uint32_t fill_color,
                           uint32_t stroke_color,
-                          const CFX_FillRenderOptions& fill_options,
-                          BlendMode blend_type);
+                          const CFX_FillRenderOptions& fill_options);
   bool DrawCosmeticLine(const CFX_PointF& ptMoveTo,
                         const CFX_PointF& ptLineTo,
                         uint32_t color,
-                        const CFX_FillRenderOptions& fill_options,
-                        BlendMode blend_type);
+                        const CFX_FillRenderOptions& fill_options);
   void DrawZeroAreaPath(const std::vector<CFX_Path::Point>& path,
                         const CFX_Matrix* matrix,
                         bool adjust,
                         bool aliased_path,
                         uint32_t fill_color,
-                        uint8_t fill_alpha,
-                        BlendMode blend_type);
-  bool FillRectWithBlend(const FX_RECT& rect,
-                         uint32_t color,
-                         BlendMode blend_type);
+                        uint8_t fill_alpha);
 
   RetainPtr<CFX_DIBitmap> m_pBitmap;
   int m_Width = 0;

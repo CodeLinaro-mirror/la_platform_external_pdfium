@@ -21,6 +21,8 @@
 #include "xfa/fwl/cfwl_widgetmgr.h"
 #include "xfa/fwl/ifwl_themeprovider.h"
 
+namespace pdfium {
+
 CFWL_WidgetTP::CFWL_WidgetTP() = default;
 
 CFWL_WidgetTP::~CFWL_WidgetTP() = default;
@@ -126,8 +128,7 @@ void CFWL_WidgetTP::DrawFocus(CFGAS_GEGraphics* pGraphics,
 
   CFGAS_GEGraphics::StateRestorer restorer(pGraphics);
   pGraphics->SetStrokeColor(CFGAS_GEColor(0xFF000000));
-  static constexpr float kDashPattern[2] = {1, 1};
-  pGraphics->SetLineDash(0.0f, kDashPattern);
+  pGraphics->SetLineDash({1, 1});
   pGraphics->StrokePath(path, matrix);
 }
 
@@ -205,3 +206,5 @@ void CFWL_WidgetTP::DrawArrowBtn(CFGAS_GEGraphics* pGraphics,
   DrawArrow(pGraphics, rect, eDict,
             m_pColorData->clrSign[static_cast<size_t>(eState) - 1], matrix);
 }
+
+}  // namespace pdfium

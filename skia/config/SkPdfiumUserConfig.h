@@ -124,7 +124,7 @@
  */
 // #define SK_HISTOGRAM_BOOLEAN(name, value)
 // #define SK_HISTOGRAM_ENUMERATION(name, value, boundary_value)
-#include "third_party/base/component_export.h"
+#include "core/fxcrt/component_export.h"
 
 // ===== Begin Chrome-specific definitions =====
 
@@ -133,7 +133,7 @@
 
 #define GR_MAX_OFFSCREEN_AA_DIM 512
 
-// Handle exporting using base/component_export.h
+// Handle exporting using core/fxcrt/component_export.h
 #define SK_API COMPONENT_EXPORT(SKIA)
 
 // Log the file and line number for assertions.
@@ -188,44 +188,11 @@ SK_API void SkDebugf_FileLine(const char* file,
 
 #endif
 
-// These flags are no longer defined in Skia, but we have them (temporarily)
-// until we update our call-sites (typically these are for API changes).
-//
-// Remove these as we update our sites.
-//
-#ifndef SK_SUPPORT_LEGACY_GETTOPDEVICE
-#define SK_SUPPORT_LEGACY_GETTOPDEVICE
-#endif
-
-#ifndef SK_SUPPORT_EXOTIC_CLIPOPS
-#define SK_SUPPORT_EXOTIC_CLIPOPS
-#endif
-
-#ifndef SK_SUPPORT_LEGACY_GETDEVICE
-#define SK_SUPPORT_LEGACY_GETDEVICE
-#endif
-
 // Workaround for poor anisotropic mipmap quality,
 // pending Skia ripmap support.
 // (https://bugs.chromium.org/p/skia/issues/detail?id=4863)
 #ifndef SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
-#endif
-
-#ifndef SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-#define SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-#endif
-
-#ifndef SK_IGNORE_ETC1_SUPPORT
-#define SK_IGNORE_ETC1_SUPPORT
-#endif
-
-#ifndef SK_IGNORE_GPU_DITHER
-#define SK_IGNORE_GPU_DITHER
-#endif
-
-#ifndef SK_SUPPORT_LEGACY_EVAL_CUBIC
-#define SK_SUPPORT_LEGACY_EVAL_CUBIC
 #endif
 
 ///////////////////////// Imported from BUILD.gn
@@ -245,7 +212,6 @@ SK_API void SkDebugf_FileLine(const char* file,
 
 #define SK_ATTR_DEPRECATED SK_NOTHING_ARG1
 #define SK_ENABLE_INST_COUNT 0
-#define GR_GL_CUSTOM_SETUP_HEADER "GrGLConfig_chrome.h"
 
 // Blink layout tests are baselined to Clang optimizing through the UB in
 // SkDivBits.

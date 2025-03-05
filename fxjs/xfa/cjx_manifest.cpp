@@ -6,8 +6,7 @@
 
 #include "fxjs/xfa/cjx_manifest.h"
 
-#include <vector>
-
+#include "core/fxcrt/span.h"
 #include "fxjs/cfx_v8.h"
 #include "fxjs/js_resources.h"
 #include "fxjs/xfa/cfxjse_value.h"
@@ -27,9 +26,8 @@ bool CJX_Manifest::DynamicTypeIs(TypeTag eType) const {
   return eType == static_type__ || ParentType__::DynamicTypeIs(eType);
 }
 
-CJS_Result CJX_Manifest::evaluate(
-    CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJX_Manifest::evaluate(CFXJSE_Engine* runtime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   if (!params.empty())
     return CJS_Result::Failure(JSMessage::kParamError);
 

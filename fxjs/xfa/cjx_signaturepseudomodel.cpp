@@ -6,8 +6,7 @@
 
 #include "fxjs/xfa/cjx_signaturepseudomodel.h"
 
-#include <vector>
-
+#include "core/fxcrt/span.h"
 #include "fxjs/js_resources.h"
 #include "fxjs/xfa/cfxjse_engine.h"
 #include "fxjs/xfa/cfxjse_value.h"
@@ -34,7 +33,7 @@ bool CJX_SignaturePseudoModel::DynamicTypeIs(TypeTag eType) const {
 
 CJS_Result CJX_SignaturePseudoModel::verifySignature(
     CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.empty() || params.size() > 4)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -43,7 +42,7 @@ CJS_Result CJX_SignaturePseudoModel::verifySignature(
 
 CJS_Result CJX_SignaturePseudoModel::sign(
     CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() < 3 || params.size() > 7)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -52,7 +51,7 @@ CJS_Result CJX_SignaturePseudoModel::sign(
 
 CJS_Result CJX_SignaturePseudoModel::enumerate(
     CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (!params.empty())
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -61,7 +60,7 @@ CJS_Result CJX_SignaturePseudoModel::enumerate(
 
 CJS_Result CJX_SignaturePseudoModel::clear(
     CFXJSE_Engine* runtime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.empty() || params.size() > 2)
     return CJS_Result::Failure(JSMessage::kParamError);
 
