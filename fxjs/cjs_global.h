@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "fxjs/cfx_keyvalue.h"
 #include "fxjs/cjs_object.h"
@@ -34,16 +35,19 @@ class CJS_Global final : public CJS_Object {
   static void DefineJSObjects(CFXJS_Engine* pEngine);
   static void DefineAllProperties(CFXJS_Engine* pEngine);
 
-  static void queryprop_static(
+  static v8::Intercepted queryprop_static(
       v8::Local<v8::Name> property,
       const v8::PropertyCallbackInfo<v8::Integer>& info);
-  static void getprop_static(v8::Local<v8::Name> property,
-                             const v8::PropertyCallbackInfo<v8::Value>& info);
-  static void putprop_static(v8::Local<v8::Name> property,
-                             v8::Local<v8::Value> value,
-                             const v8::PropertyCallbackInfo<v8::Value>& info);
-  static void delprop_static(v8::Local<v8::Name> property,
-                             const v8::PropertyCallbackInfo<v8::Boolean>& info);
+  static v8::Intercepted getprop_static(
+      v8::Local<v8::Name> property,
+      const v8::PropertyCallbackInfo<v8::Value>& info);
+  static v8::Intercepted putprop_static(
+      v8::Local<v8::Name> property,
+      v8::Local<v8::Value> value,
+      const v8::PropertyCallbackInfo<void>& info);
+  static v8::Intercepted delprop_static(
+      v8::Local<v8::Name> property,
+      const v8::PropertyCallbackInfo<v8::Boolean>& info);
   static void enumprop_static(const v8::PropertyCallbackInfo<v8::Array>& info);
 
   static void setPersistent_static(
@@ -82,7 +86,7 @@ class CJS_Global final : public CJS_Object {
       v8::Local<v8::Object> pObj);
   void PutObjectProperty(v8::Local<v8::Object> obj, CFX_KeyValue* pData);
   CJS_Result setPersistent(CJS_Runtime* pRuntime,
-                           const std::vector<v8::Local<v8::Value>>& params);
+                           pdfium::span<v8::Local<v8::Value>> params);
   bool HasProperty(const ByteString& propname);
   bool DelProperty(const ByteString& propname);
   CJS_Result GetProperty(CJS_Runtime* pRuntime, const ByteString& propname);

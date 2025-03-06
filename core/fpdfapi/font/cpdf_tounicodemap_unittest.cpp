@@ -6,11 +6,11 @@
 
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/base/containers/span.h"
 
-TEST(cpdf_tounicodemap, StringToCode) {
+TEST(CPDFToUnicodeMapTest, StringToCode) {
   EXPECT_THAT(CPDF_ToUnicodeMap::StringToCode("<0001>"), testing::Optional(1u));
   EXPECT_THAT(CPDF_ToUnicodeMap::StringToCode("<c2>"), testing::Optional(194u));
   EXPECT_THAT(CPDF_ToUnicodeMap::StringToCode("<A2>"), testing::Optional(162u));
@@ -42,7 +42,7 @@ TEST(cpdf_tounicodemap, StringToCode) {
   EXPECT_FALSE(CPDF_ToUnicodeMap::StringToCode("<00NN>").has_value());
 }
 
-TEST(cpdf_tounicodemap, StringToWideString) {
+TEST(CPDFToUnicodeMapTest, StringToWideString) {
   EXPECT_EQ(L"", CPDF_ToUnicodeMap::StringToWideString(""));
   EXPECT_EQ(L"", CPDF_ToUnicodeMap::StringToWideString("1234"));
   EXPECT_EQ(L"", CPDF_ToUnicodeMap::StringToWideString("<c2"));
@@ -59,42 +59,38 @@ TEST(cpdf_tounicodemap, StringToWideString) {
   EXPECT_EQ(res, CPDF_ToUnicodeMap::StringToWideString("<c2abFaAb12>"));
 }
 
-TEST(cpdf_tounicodemap, HandleBeginBFRangeAvoidIntegerOverflow) {
+TEST(CPDFToUnicodeMapTest, HandleBeginBFRangeAvoidIntegerOverflow) {
   // Make sure there won't be infinite loops due to integer overflows in
   // HandleBeginBFRange().
   {
     static constexpr uint8_t kInput1[] =
         "beginbfrange<FFFFFFFF><FFFFFFFF>[<0041>]endbfrange";
-    auto stream = pdfium::MakeRetain<CPDF_Stream>();
-    stream->SetData(pdfium::make_span(kInput1));
+    auto stream = pdfium::MakeRetain<CPDF_Stream>(kInput1);
     CPDF_ToUnicodeMap map(stream);
-    EXPECT_STREQ(L"A", map.Lookup(0xffffffff).c_str());
+    EXPECT_EQ(L"A", map.Lookup(0xffffffff));
   }
   {
     static constexpr uint8_t kInput2[] =
         "beginbfrange<FFFFFFFF><FFFFFFFF><0042>endbfrange";
-    auto stream = pdfium::MakeRetain<CPDF_Stream>();
-    stream->SetData(pdfium::make_span(kInput2));
+    auto stream = pdfium::MakeRetain<CPDF_Stream>(kInput2);
     CPDF_ToUnicodeMap map(stream);
-    EXPECT_STREQ(L"B", map.Lookup(0xffffffff).c_str());
+    EXPECT_EQ(L"B", map.Lookup(0xffffffff));
   }
   {
     static constexpr uint8_t kInput3[] =
         "beginbfrange<FFFFFFFF><FFFFFFFF><00410042>endbfrange";
-    auto stream = pdfium::MakeRetain<CPDF_Stream>();
-    stream->SetData(pdfium::make_span(kInput3));
+    auto stream = pdfium::MakeRetain<CPDF_Stream>(kInput3);
     CPDF_ToUnicodeMap map(stream);
-    EXPECT_STREQ(L"AB", map.Lookup(0xffffffff).c_str());
+    EXPECT_EQ(L"AB", map.Lookup(0xffffffff));
   }
 }
 
-TEST(cpdf_tounicodemap, InsertIntoMultimap) {
+TEST(CPDFToUnicodeMapTest, InsertIntoMultimap) {
   {
     // Both the CIDs and the unicodes are different.
     static constexpr uint8_t kInput1[] =
         "beginbfchar<1><0041><2><0042>endbfchar";
-    auto stream = pdfium::MakeRetain<CPDF_Stream>();
-    stream->SetData(pdfium::make_span(kInput1));
+    auto stream = pdfium::MakeRetain<CPDF_Stream>(kInput1);
     CPDF_ToUnicodeMap map(stream);
     EXPECT_EQ(1u, map.ReverseLookup(0x0041));
     EXPECT_EQ(2u, map.ReverseLookup(0x0042));
@@ -105,8 +101,7 @@ TEST(cpdf_tounicodemap, InsertIntoMultimap) {
     // The same CID with different unicodes.
     static constexpr uint8_t kInput2[] =
         "beginbfrange<0><0><0041><0><0><0042>endbfrange";
-    auto stream = pdfium::MakeRetain<CPDF_Stream>();
-    stream->SetData(pdfium::make_span(kInput2));
+    auto stream = pdfium::MakeRetain<CPDF_Stream>(kInput2);
     CPDF_ToUnicodeMap map(stream);
     EXPECT_EQ(0u, map.ReverseLookup(0x0041));
     EXPECT_EQ(0u, map.ReverseLookup(0x0042));
@@ -118,10 +113,20 @@ TEST(cpdf_tounicodemap, InsertIntoMultimap) {
     static constexpr uint8_t kInput3[] =
         "beginbfrange<0><0>[<0041>]endbfrange\n"
         "beginbfchar<0><0041>endbfchar";
-    auto stream = pdfium::MakeRetain<CPDF_Stream>();
-    stream->SetData(pdfium::make_span(kInput3));
+    auto stream = pdfium::MakeRetain<CPDF_Stream>(kInput3);
     CPDF_ToUnicodeMap map(stream);
     EXPECT_EQ(0u, map.ReverseLookup(0x0041));
     EXPECT_EQ(1u, map.GetUnicodeCountByCharcodeForTesting(0u));
   }
+}
+
+TEST(CPDFToUnicodeMapTest, NonBmpUnicodeLookup) {
+  static constexpr uint8_t kInput[] = "beginbfchar<01><d841de76>endbfchar";
+  CPDF_ToUnicodeMap map(pdfium::MakeRetain<CPDF_Stream>(kInput));
+  EXPECT_EQ(L"\xd841\xde76", map.Lookup(0x01));
+#if defined(WCHAR_T_IS_32_BIT)
+  // TODO(crbug.com/374947848): Should work if wchar_t is 16-bit.
+  // TODO(crbug.com/374947848): Should return 1u.
+  EXPECT_EQ(0u, map.ReverseLookup(0x20676));
+#endif
 }

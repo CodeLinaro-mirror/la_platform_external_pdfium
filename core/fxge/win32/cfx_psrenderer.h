@@ -11,20 +11,19 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <vector>
 
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_coordinates.h"
-#include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_stream.h"
 #include "core/fxcrt/fx_string_wrappers.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_graphstatedata.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/base/containers/span.h"
 
 class CFX_DIBBase;
 class CFX_Font;
@@ -37,9 +36,9 @@ struct FXDIB_ResampleOptions;
 
 struct EncoderIface {
   DataVector<uint8_t> (*pA85EncodeFunc)(pdfium::span<const uint8_t> src_span);
-  DataVector<uint8_t> (*pFaxEncodeFunc)(RetainPtr<CFX_DIBBase> src);
+  DataVector<uint8_t> (*pFaxEncodeFunc)(RetainPtr<const CFX_DIBBase> src);
   DataVector<uint8_t> (*pFlateEncodeFunc)(pdfium::span<const uint8_t> src_span);
-  bool (*pJpegEncodeFunc)(const RetainPtr<CFX_DIBBase>& pSource,
+  bool (*pJpegEncodeFunc)(const RetainPtr<const CFX_DIBBase>& pSource,
                           uint8_t** dest_buf,
                           size_t* dest_size);
   DataVector<uint8_t> (*pRunLengthEncodeFunc)(
@@ -70,25 +69,25 @@ class CFX_PSRenderer {
   void SetClip_PathStroke(const CFX_Path& path,
                           const CFX_Matrix* pObject2Device,
                           const CFX_GraphStateData* pGraphState);
-  FX_RECT GetClipBox() { return m_ClipBox; }
+  FX_RECT GetClipBox() const { return m_ClipBox; }
   bool DrawPath(const CFX_Path& path,
                 const CFX_Matrix* pObject2Device,
                 const CFX_GraphStateData* pGraphState,
                 uint32_t fill_color,
                 uint32_t stroke_color,
                 const CFX_FillRenderOptions& fill_options);
-  bool SetDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool SetDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                  uint32_t color,
                  int dest_left,
                  int dest_top);
-  bool StretchDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                      uint32_t color,
                      int dest_left,
                      int dest_top,
                      int dest_width,
                      int dest_height,
                      const FXDIB_ResampleOptions& options);
-  bool DrawDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                   uint32_t color,
                   const CFX_Matrix& matrix,
                   const FXDIB_ResampleOptions& options);
@@ -99,7 +98,7 @@ class CFX_PSRenderer {
                 float font_size,
                 uint32_t color);
 
-  static absl::optional<ByteString> GenerateType42SfntDataForTesting(
+  static std::optional<ByteString> GenerateType42SfntDataForTesting(
       const ByteString& psname,
       pdfium::span<const uint8_t> font_data);
 
@@ -156,8 +155,8 @@ class CFX_PSRenderer {
                             CFX_Font* font,
                             float font_size,
                             fxcrt::ostringstream& buf);
-  FaxCompressResult FaxCompressData(RetainPtr<CFX_DIBBase> src) const;
-  absl::optional<PSCompressResult> PSCompressData(
+  FaxCompressResult FaxCompressData(RetainPtr<const CFX_DIBBase> src) const;
+  std::optional<PSCompressResult> PSCompressData(
       pdfium::span<const uint8_t> src_span) const;
   void WritePreambleString(ByteStringView str);
   void WritePSBinary(pdfium::span<const uint8_t> data);
@@ -167,7 +166,7 @@ class CFX_PSRenderer {
   bool m_bInited = false;
   bool m_bGraphStateSet = false;
   bool m_bColorSet = false;
-  absl::optional<RenderingLevel> m_Level;
+  std::optional<RenderingLevel> m_Level;
   uint32_t m_LastColor = 0;
   FX_RECT m_ClipBox;
   CFX_GraphStateData m_CurGraphState;

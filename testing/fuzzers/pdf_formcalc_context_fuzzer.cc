@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_string.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "fpdfsdk/fpdfxfa/cpdfxfa_context.h"
@@ -521,16 +522,14 @@ class PDFiumFormCalcContextFuzzer : public PDFiumFuzzerHelper {
     CXFA_Document* xfa_document = context->GetXFADoc()->GetXFADoc();
     CFXJSE_Engine* script_context = xfa_document->GetScriptContext();
 
-    CXFA_EventParam params;
+    CXFA_EventParam params(XFA_EVENT_Unknown);
     params.m_bCancelAction = false;
     CFXJSE_Engine::EventParamScope param_scope(script_context, nullptr,
                                                &params);
-    ByteStringView data_view(data_, size_);
-
-    auto value = std::make_unique<CFXJSE_Value>();
+    auto data_view = UNSAFE_TODO(ByteStringView(data_, size_));
     script_context->RunScript(CXFA_Script::Type::Formcalc,
                               WideString::FromUTF8(data_view).AsStringView(),
-                              value.get(), xfa_document->GetRoot());
+                              xfa_document->GetRoot());
   }
 
  private:

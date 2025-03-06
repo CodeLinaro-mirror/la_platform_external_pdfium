@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <array>
 #include <set>
+#include <string>
 #include <vector>
 
+#include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
+#include "core/fpdfapi/parser/cpdf_reference.h"
 #include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/fx_safe_types.h"
+#include "core/fxge/cfx_defaultrenderdevice.h"
 #include "fpdfsdk/cpdfsdk_helpers.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_doc.h"
@@ -15,6 +21,57 @@
 #include "testing/embedder_test.h"
 #include "testing/fx_string_testhelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+
+// Look for "/Type/Page" but ignore "/Type/Pages".
+int CountPageEntries(const std::string& data) {
+  static constexpr char kNeedle[] = "/Type/Page";
+  static constexpr size_t kNeedleLen = std::size(kNeedle) - 1;
+
+  size_t pos = 0;
+  int count = 0;
+  while (pos < data.size()) {
+    const size_t found_pos = data.find(kNeedle, pos);
+    if (found_pos == std::string::npos) {
+      break;
+    }
+
+    FX_SAFE_SIZE_T next_pos = found_pos;
+    next_pos += kNeedleLen;
+    pos = next_pos.ValueOrDefault(std::string::npos);
+    if (pos < data.size() && data[pos] == 's') {
+      // Ignore "/Type/Pages".
+      ++pos;
+    } else {
+      ++count;
+    }
+  }
+  return count;
+}
+
+// Look for ">stream\r\n".
+int CountStreamEntries(const std::string& data) {
+  static constexpr char kNeedle[] = ">stream\r\n";
+  static constexpr size_t kNeedleLen = std::size(kNeedle) - 1;
+
+  size_t pos = 0;
+  int count = 0;
+  while (pos < data.size()) {
+    const size_t found_pos = data.find(kNeedle, pos);
+    if (found_pos == std::string::npos) {
+      break;
+    }
+
+    FX_SAFE_SIZE_T next_pos = found_pos;
+    next_pos += kNeedleLen;
+    pos = next_pos.ValueOrDefault(std::string::npos);
+    ++count;
+  }
+  return count;
+}
+
+}  // namespace
 
 class FPDFDocEmbedderTest : public EmbedderTest {};
 
@@ -152,7 +209,7 @@ TEST_F(FPDFDocEmbedderTest, DestGetLocationInPage) {
   EXPECT_EQ(1, zoom);
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_1506_1) {
+TEST_F(FPDFDocEmbedderTest, Bug1506First) {
   ASSERT_TRUE(OpenDocument("bug_1506.pdf"));
 
   FPDF_DEST dest = FPDF_GetNamedDestByName(document(), "First");
@@ -160,37 +217,33 @@ TEST_F(FPDFDocEmbedderTest, BUG_1506_1) {
   EXPECT_EQ(3, FPDFDest_GetDestPageIndex(document(), dest));
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_1506_2) {
+TEST_F(FPDFDocEmbedderTest, Bug1506Second) {
   ASSERT_TRUE(OpenDocument("bug_1506.pdf"));
 
-  std::vector<FPDF_PAGE> pages;
-  for (int i : {0, 2})
-    pages.push_back(LoadPage(i));
+  std::vector<ScopedEmbedderTestPage> pages;
+  for (int i : {0, 2}) {
+    pages.push_back(LoadScopedPage(i));
+  }
 
   FPDF_DEST dest = FPDF_GetNamedDestByName(document(), "First");
   ASSERT_TRUE(dest);
   EXPECT_EQ(3, FPDFDest_GetDestPageIndex(document(), dest));
-
-  for (FPDF_PAGE page : pages)
-    UnloadPage(page);
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_1506_3) {
+TEST_F(FPDFDocEmbedderTest, Bug1506Third) {
   ASSERT_TRUE(OpenDocument("bug_1506.pdf"));
 
-  std::vector<FPDF_PAGE> pages;
-  for (int i : {0, 1, 3})
-    pages.push_back(LoadPage(i));
+  std::vector<ScopedEmbedderTestPage> pages;
+  for (int i : {0, 1, 3}) {
+    pages.push_back(LoadScopedPage(i));
+  }
 
   FPDF_DEST dest = FPDF_GetNamedDestByName(document(), "First");
   ASSERT_TRUE(dest);
   EXPECT_EQ(3, FPDFDest_GetDestPageIndex(document(), dest));
-
-  for (FPDF_PAGE page : pages)
-    UnloadPage(page);
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_680376) {
+TEST_F(FPDFDocEmbedderTest, Bug680376) {
   ASSERT_TRUE(OpenDocument("bug_680376.pdf"));
 
   // Page number directly in item from Dests NameTree.
@@ -199,23 +252,23 @@ TEST_F(FPDFDocEmbedderTest, BUG_680376) {
   EXPECT_EQ(-1, FPDFDest_GetDestPageIndex(document(), dest));
 }
 
-TEST_F(FPDFDocEmbedderTest, BUG_821454) {
+TEST_F(FPDFDocEmbedderTest, Bug821454) {
   ASSERT_TRUE(OpenDocument("bug_821454.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // Cover some invalid argument cases while we're at it.
   EXPECT_FALSE(FPDFLink_GetLinkAtPoint(nullptr, 150, 360));
   EXPECT_EQ(-1, FPDFLink_GetLinkZOrderAtPoint(nullptr, 150, 360));
 
-  FPDF_LINK link1 = FPDFLink_GetLinkAtPoint(page, 150, 360);
+  FPDF_LINK link1 = FPDFLink_GetLinkAtPoint(page.get(), 150, 360);
   ASSERT_TRUE(link1);
-  FPDF_LINK link2 = FPDFLink_GetLinkAtPoint(page, 150, 420);
+  FPDF_LINK link2 = FPDFLink_GetLinkAtPoint(page.get(), 150, 420);
   ASSERT_TRUE(link2);
 
-  EXPECT_EQ(0, FPDFLink_GetLinkZOrderAtPoint(page, 150, 360));
-  EXPECT_EQ(1, FPDFLink_GetLinkZOrderAtPoint(page, 150, 420));
+  EXPECT_EQ(0, FPDFLink_GetLinkZOrderAtPoint(page.get(), 150, 360));
+  EXPECT_EQ(1, FPDFLink_GetLinkZOrderAtPoint(page.get(), 150, 420));
 
   FPDF_DEST dest1 = FPDFLink_GetDest(document(), link1);
   ASSERT_TRUE(dest1);
@@ -262,8 +315,6 @@ TEST_F(FPDFDocEmbedderTest, BUG_821454) {
     EXPECT_FLOAT_EQ(150.0f, x);
     EXPECT_FLOAT_EQ(250.0f, y);
   }
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, ActionBadArguments) {
@@ -281,11 +332,11 @@ TEST_F(FPDFDocEmbedderTest, ActionBadArguments) {
 TEST_F(FPDFDocEmbedderTest, ActionLaunch) {
   ASSERT_TRUE(OpenDocument("launch_action.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // The target action is nearly the size of the whole page.
-  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, 100, 100);
+  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page.get(), 100, 100);
   ASSERT_TRUE(link);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
@@ -305,18 +356,16 @@ TEST_F(FPDFDocEmbedderTest, ActionLaunch) {
   // Other public methods are not appropriate for launch actions.
   EXPECT_FALSE(FPDFAction_GetDest(document(), action));
   EXPECT_EQ(0u, FPDFAction_GetURIPath(document(), action, buf, sizeof(buf)));
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, ActionUri) {
   ASSERT_TRUE(OpenDocument("uri_action.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // The target action is nearly the size of the whole page.
-  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, 100, 100);
+  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page.get(), 100, 100);
   ASSERT_TRUE(link);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
@@ -336,18 +385,16 @@ TEST_F(FPDFDocEmbedderTest, ActionUri) {
   // Other public methods are not appropriate for URI actions
   EXPECT_FALSE(FPDFAction_GetDest(document(), action));
   EXPECT_EQ(0u, FPDFAction_GetFilePath(action, buf, sizeof(buf)));
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, ActionUriNonAscii) {
   ASSERT_TRUE(OpenDocument("uri_action_nonascii.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // The target action is nearly the size of the whole page.
-  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, 100, 100);
+  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page.get(), 100, 100);
   ASSERT_TRUE(link);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
@@ -367,40 +414,37 @@ TEST_F(FPDFDocEmbedderTest, ActionUriNonAscii) {
   char buf[1024];
   EXPECT_EQ(bufsize, FPDFAction_GetURIPath(document(), action, buf, bufsize));
   EXPECT_STREQ(kExpectedResult, buf);
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, LinkToAnnotConversion) {
   ASSERT_TRUE(OpenDocument("annots.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
   {
-    FPDF_LINK first_link = FPDFLink_GetLinkAtPoint(page, 69.00, 653.00);
-    ScopedFPDFAnnotation first_annot(FPDFLink_GetAnnot(page, first_link));
-    EXPECT_EQ(0, FPDFPage_GetAnnotIndex(page, first_annot.get()));
+    FPDF_LINK first_link = FPDFLink_GetLinkAtPoint(page.get(), 69.00, 653.00);
+    ScopedFPDFAnnotation first_annot(FPDFLink_GetAnnot(page.get(), first_link));
+    EXPECT_EQ(0, FPDFPage_GetAnnotIndex(page.get(), first_annot.get()));
 
-    FPDF_LINK second_link = FPDFLink_GetLinkAtPoint(page, 80.00, 633.00);
-    ScopedFPDFAnnotation second_annot(FPDFLink_GetAnnot(page, second_link));
-    EXPECT_EQ(1, FPDFPage_GetAnnotIndex(page, second_annot.get()));
+    FPDF_LINK second_link = FPDFLink_GetLinkAtPoint(page.get(), 80.00, 633.00);
+    ScopedFPDFAnnotation second_annot(
+        FPDFLink_GetAnnot(page.get(), second_link));
+    EXPECT_EQ(1, FPDFPage_GetAnnotIndex(page.get(), second_annot.get()));
 
     // Also test invalid arguments.
     EXPECT_FALSE(FPDFLink_GetAnnot(nullptr, nullptr));
-    EXPECT_FALSE(FPDFLink_GetAnnot(page, nullptr));
+    EXPECT_FALSE(FPDFLink_GetAnnot(page.get(), nullptr));
     EXPECT_FALSE(FPDFLink_GetAnnot(nullptr, second_link));
   }
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, ActionGoto) {
   ASSERT_TRUE(OpenDocument("goto_action.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // The target action is nearly the size of the whole page.
-  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, 100, 100);
+  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page.get(), 100, 100);
   ASSERT_TRUE(link);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
@@ -414,18 +458,16 @@ TEST_F(FPDFDocEmbedderTest, ActionGoto) {
   char buf[1024];
   EXPECT_EQ(0u, FPDFAction_GetFilePath(action, buf, sizeof(buf)));
   EXPECT_EQ(0u, FPDFAction_GetURIPath(document(), action, buf, sizeof(buf)));
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, ActionEmbeddedGoto) {
   ASSERT_TRUE(OpenDocument("gotoe_action.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // The target action is nearly the size of the whole page.
-  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, 100, 100);
+  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page.get(), 100, 100);
   ASSERT_TRUE(link);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
@@ -451,18 +493,16 @@ TEST_F(FPDFDocEmbedderTest, ActionEmbeddedGoto) {
   EXPECT_EQ(kExpectedLength, bufsize);
   EXPECT_EQ(kExpectedLength, FPDFAction_GetFilePath(action, buf, bufsize));
   EXPECT_STREQ(kExpectedResult, buf);
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, ActionNonesuch) {
   ASSERT_TRUE(OpenDocument("nonesuch_action.pdf"));
 
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // The target action is nearly the size of the whole page.
-  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page, 100, 100);
+  FPDF_LINK link = FPDFLink_GetLinkAtPoint(page.get(), 100, 100);
   ASSERT_TRUE(link);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
@@ -475,8 +515,6 @@ TEST_F(FPDFDocEmbedderTest, ActionNonesuch) {
   EXPECT_FALSE(FPDFAction_GetDest(document(), action));
   EXPECT_EQ(0u, FPDFAction_GetFilePath(action, buf, sizeof(buf)));
   EXPECT_EQ(0u, FPDFAction_GetURIPath(document(), action, buf, sizeof(buf)));
-
-  UnloadPage(page);
 }
 
 TEST_F(FPDFDocEmbedderTest, NoBookmarks) {
@@ -566,7 +604,7 @@ TEST_F(FPDFDocEmbedderTest, FindBookmarks) {
 }
 
 // Check circular bookmarks will not cause infinite loop.
-TEST_F(FPDFDocEmbedderTest, FindBookmarks_bug420) {
+TEST_F(FPDFDocEmbedderTest, FindBookmarksBug420) {
   // Open a file with circular bookmarks.
   ASSERT_TRUE(OpenDocument("bookmarks_circular.pdf"));
 
@@ -589,6 +627,173 @@ TEST_F(FPDFDocEmbedderTest, DeletePage) {
 
   FPDFPage_Delete(document(), 0);
   EXPECT_EQ(0, FPDF_GetPageCount(document()));
+}
+
+TEST_F(FPDFDocEmbedderTest, DeletePageAndRender) {
+  struct PageData {
+    int width;
+    int height;
+    const char* checksum;
+  };
+  const std::array<const PageData, 5> expected_page_data = {{
+      {200, 250,
+       []() {
+         return CFX_DefaultRenderDevice::UseSkiaRenderer()
+                    ? "4b6590a267eae90b8be1607e808fb57f"
+                    : "1e5d1cf19ffbb9cf9dbf099483cea327";
+       }()},
+      {250, 200,
+       []() {
+         return CFX_DefaultRenderDevice::UseSkiaRenderer()
+                    ? "e8edd3655f6629ff489bd8c3bb110c82"
+                    : "65c80685916aa36e767dd2270ba4d72b";
+       }()},
+      {200, 250,
+       []() {
+         return CFX_DefaultRenderDevice::UseSkiaRenderer()
+                    ? "a2bde6b68d7981e665ab25bc633746aa"
+                    : "a53b21c68edf43c1cddb5c06e361bb45";
+       }()},
+      {200, 250,
+       []() {
+         return CFX_DefaultRenderDevice::UseSkiaRenderer()
+                    ? "a8c5b3e626f665eddf593c6d4c32ae9e"
+                    : "dcd768be15efb9c6e5093cf74508752c";
+       }()},
+      {200, 250,
+       []() {
+         return CFX_DefaultRenderDevice::UseSkiaRenderer()
+                    ? "72eb157853ae2d19b70ea62e3f5ac202"
+                    : "7a3f8f79ebcb350854c0d69607729ec5";
+       }()},
+  }};
+
+  // Render the original document. (page indices 0-4)
+  ASSERT_TRUE(OpenDocument("rectangles_multi_pages.pdf"));
+  EXPECT_EQ(5, FPDF_GetPageCount(document()));
+  for (int i = 0; i < 5; ++i) {
+    ScopedEmbedderTestPage page = LoadScopedPage(i);
+    ASSERT_TRUE(page);
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    const PageData& expected = expected_page_data[i];
+    CompareBitmap(bitmap.get(), expected.width, expected.height,
+                  expected.checksum);
+  }
+
+  // Delete the first page and render again. (original page indices 1-4)
+  FPDFPage_Delete(document(), 0);
+  EXPECT_EQ(4, FPDF_GetPageCount(document()));
+  for (int i = 0; i < 4; ++i) {
+    ScopedEmbedderTestPage page = LoadScopedPage(i);
+    ASSERT_TRUE(page);
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    const PageData& expected = expected_page_data[i + 1];
+    CompareBitmap(bitmap.get(), expected.width, expected.height,
+                  expected.checksum);
+  }
+
+  // Delete the last page and render again. (original page indices 1-3)
+  FPDFPage_Delete(document(), 3);
+  EXPECT_EQ(3, FPDF_GetPageCount(document()));
+  for (int i = 0; i < 3; ++i) {
+    ScopedEmbedderTestPage page = LoadScopedPage(i);
+    ASSERT_TRUE(page);
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    const PageData& expected = expected_page_data[i + 1];
+    CompareBitmap(bitmap.get(), expected.width, expected.height,
+                  expected.checksum);
+  }
+
+  // Delete the middle page and render again. (original page indices 1, 3)
+  FPDFPage_Delete(document(), 1);
+  EXPECT_EQ(2, FPDF_GetPageCount(document()));
+  for (int i = 0; i < 2; ++i) {
+    ScopedEmbedderTestPage page = LoadScopedPage(i);
+    ASSERT_TRUE(page);
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    int adjusted_index = i == 0 ? 1 : 3;
+    const PageData& expected = expected_page_data[adjusted_index];
+    CompareBitmap(bitmap.get(), expected.width, expected.height,
+                  expected.checksum);
+  }
+}
+
+TEST_F(FPDFDocEmbedderTest, DeletePageAndSaveWithBookmarks) {
+  // The bookmarks reference the deleted page.
+  ASSERT_TRUE(OpenDocument("bookmarks.pdf"));
+
+  EXPECT_EQ(2, FPDF_GetPageCount(document()));
+  FPDFPage_Delete(document(), 0);
+  EXPECT_EQ(1, FPDF_GetPageCount(document()));
+
+  ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+  EXPECT_EQ(1, CountPageEntries(GetString()));
+  EXPECT_EQ(1, CountStreamEntries(GetString()));
+}
+
+TEST_F(FPDFDocEmbedderTest, DeletePageAndSaveWithCustomObject) {
+  // There exists a non-standard object that references the deleted page.
+  ASSERT_TRUE(OpenDocument("hello_world_2_pages_custom_object.pdf"));
+
+  EXPECT_EQ(2, FPDF_GetPageCount(document()));
+  FPDFPage_Delete(document(), 0);
+  EXPECT_EQ(1, FPDF_GetPageCount(document()));
+
+  ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+  EXPECT_EQ(1, CountPageEntries(GetString()));
+  EXPECT_EQ(1, CountStreamEntries(GetString()));
+}
+
+TEST_F(FPDFDocEmbedderTest, DeletePageAndSaveWithCustomObjectForNewPage) {
+  ASSERT_TRUE(OpenDocument("hello_world.pdf"));
+
+  EXPECT_EQ(1, FPDF_GetPageCount(document()));
+
+  {
+    ScopedFPDFPage new_page(FPDFPage_New(document(), 1, 300, 200));
+    ASSERT_TRUE(new_page);
+    EXPECT_EQ(2, FPDF_GetPageCount(document()));
+
+    // Add a non-standard object that references the newly created page.
+    CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document());
+    ASSERT_TRUE(doc);
+
+    CPDF_Page* page = CPDFPageFromFPDFPage(new_page.get());
+    ASSERT_TRUE(page);
+
+    RetainPtr<CPDF_Dictionary> root_dict = doc->GetMutableRoot();
+    ASSERT_TRUE(root_dict);
+    root_dict->SetNewFor<CPDF_Reference>("CustomField", doc,
+                                         page->GetDict()->GetObjNum());
+  }
+
+  FPDFPage_Delete(document(), 1);
+  EXPECT_EQ(1, FPDF_GetPageCount(document()));
+
+  ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+  EXPECT_EQ(1, CountPageEntries(GetString()));
+  EXPECT_EQ(1, CountStreamEntries(GetString()));
+}
+
+TEST_F(FPDFDocEmbedderTest, DeletePageAndSaveForPageWithMultipleUses) {
+  // The deleted pages both use the same /Page object.
+  ASSERT_TRUE(OpenDocument("bug_1229106.pdf"));
+
+  EXPECT_EQ(4, FPDF_GetPageCount(document()));
+  FPDFPage_Delete(document(), 0);
+  EXPECT_EQ(3, FPDF_GetPageCount(document()));
+
+  ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+  EXPECT_EQ(2, CountPageEntries(GetString()));
+  EXPECT_EQ(2, CountStreamEntries(GetString()));
+
+  ClearString();
+  FPDFPage_Delete(document(), 0);
+  EXPECT_EQ(2, FPDF_GetPageCount(document()));
+
+  ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+  EXPECT_EQ(1, CountPageEntries(GetString()));
+  EXPECT_EQ(1, CountStreamEntries(GetString()));
 }
 
 TEST_F(FPDFDocEmbedderTest, GetFileIdentifier) {
@@ -670,7 +875,21 @@ TEST_F(FPDFDocEmbedderTest, GetMetaText) {
   EXPECT_EQ(L"D:20160411190039+00'00'", GetPlatformWString(buf));
 }
 
-TEST_F(FPDFDocEmbedderTest, Bug_182) {
+TEST_F(FPDFDocEmbedderTest, Utf8Metadata) {
+  ASSERT_TRUE(OpenDocument("utf-8.pdf"));
+
+  unsigned short buf[128];
+
+  ASSERT_EQ(34u, FPDF_GetMetaText(document(), "Producer", buf, sizeof(buf)));
+  EXPECT_EQ(L"Manüally Created", GetPlatformWString(buf));
+
+  FPDF_BOOKMARK child = FPDFBookmark_GetFirstChild(document(), nullptr);
+  EXPECT_TRUE(child);
+  EXPECT_EQ(16u, FPDFBookmark_GetTitle(child, buf, sizeof(buf)));
+  EXPECT_EQ(L"Titlè 1", GetPlatformWString(buf));
+}
+
+TEST_F(FPDFDocEmbedderTest, Bug182) {
   ASSERT_TRUE(OpenDocument("bug_182.pdf"));
 
   unsigned short buf[128];
@@ -700,23 +919,22 @@ TEST_F(FPDFDocEmbedderTest, GetMetaTextInAttachmentFile) {
 }
 
 TEST_F(FPDFDocEmbedderTest, GetMetaTextFromNewDocument) {
-  FPDF_DOCUMENT empty_doc = FPDF_CreateNewDocument();
+  ScopedFPDFDocument empty_doc(FPDF_CreateNewDocument());
   unsigned short buf[128];
-  EXPECT_EQ(2u, FPDF_GetMetaText(empty_doc, "Title", buf, sizeof(buf)));
-  FPDF_CloseDocument(empty_doc);
+  EXPECT_EQ(2u, FPDF_GetMetaText(empty_doc.get(), "Title", buf, sizeof(buf)));
 }
 
 TEST_F(FPDFDocEmbedderTest, GetPageAAction) {
   ASSERT_TRUE(OpenDocument("get_page_aaction.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   EXPECT_TRUE(page);
 
   EXPECT_FALSE(FPDF_GetPageAAction(nullptr, FPDFPAGE_AACTION_OPEN));
-  EXPECT_FALSE(FPDF_GetPageAAction(page, FPDFPAGE_AACTION_CLOSE));
-  EXPECT_FALSE(FPDF_GetPageAAction(page, -1));
-  EXPECT_FALSE(FPDF_GetPageAAction(page, 999));
+  EXPECT_FALSE(FPDF_GetPageAAction(page.get(), FPDFPAGE_AACTION_CLOSE));
+  EXPECT_FALSE(FPDF_GetPageAAction(page.get(), -1));
+  EXPECT_FALSE(FPDF_GetPageAAction(page.get(), 999));
 
-  FPDF_ACTION action = FPDF_GetPageAAction(page, FPDFPAGE_AACTION_OPEN);
+  FPDF_ACTION action = FPDF_GetPageAAction(page.get(), FPDFPAGE_AACTION_OPEN);
   EXPECT_EQ(static_cast<unsigned long>(PDFACTION_EMBEDDEDGOTO),
             FPDFAction_GetType(action));
 
@@ -729,13 +947,10 @@ TEST_F(FPDFDocEmbedderTest, GetPageAAction) {
   EXPECT_EQ(kExpectedLength, FPDFAction_GetFilePath(action, buf, bufsize));
   EXPECT_STREQ(kExpectedResult, buf);
 
-  UnloadPage(page);
+  ScopedEmbedderTestPage page1 = LoadScopedPage(1);
 
-  page = LoadPage(1);
-  EXPECT_TRUE(page);
-  EXPECT_FALSE(FPDF_GetPageAAction(page, -1));
-
-  UnloadPage(page);
+  EXPECT_TRUE(page1.get());
+  EXPECT_FALSE(FPDF_GetPageAAction(page1.get(), -1));
 }
 
 TEST_F(FPDFDocEmbedderTest, NoPageLabels) {

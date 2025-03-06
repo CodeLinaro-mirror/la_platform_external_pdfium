@@ -28,10 +28,8 @@ bool CPDF_StitchFunc::v_Init(const CPDF_Object* pObj, VisitedSet* pVisited) {
   if (m_nInputs != kRequiredNumInputs)
     return false;
 
+  CHECK(pObj->IsDictionary() || pObj->IsStream());
   RetainPtr<const CPDF_Dictionary> pDict = pObj->GetDict();
-  if (!pDict)
-    return false;
-
   RetainPtr<const CPDF_Array> pFunctionsArray = pDict->GetArrayFor("Functions");
   if (!pFunctionsArray)
     return false;
@@ -65,7 +63,7 @@ bool CPDF_StitchFunc::v_Init(const CPDF_Object* pObj, VisitedSet* pVisited) {
 
   // Check sub-functions.
   {
-    absl::optional<uint32_t> nOutputs;
+    std::optional<uint32_t> nOutputs;
     for (uint32_t i = 0; i < nSubs; ++i) {
       RetainPtr<const CPDF_Object> pSub = pFunctionsArray->GetDirectObjectAt(i);
       if (pSub == pObj)
@@ -78,10 +76,11 @@ bool CPDF_StitchFunc::v_Init(const CPDF_Object* pObj, VisitedSet* pVisited) {
 
       // Check that the input dimensionality is 1, and that all output
       // dimensionalities are the same.
-      if (pFunc->CountInputs() != kRequiredNumInputs)
+      if (pFunc->InputCount() != kRequiredNumInputs) {
         return false;
+      }
 
-      uint32_t nFuncOutputs = pFunc->CountOutputs();
+      uint32_t nFuncOutputs = pFunc->OutputCount();
       if (nFuncOutputs == 0)
         return false;
 
@@ -110,13 +109,13 @@ bool CPDF_StitchFunc::v_Call(pdfium::span<const float> inputs,
                              pdfium::span<float> results) const {
   float input = inputs[0];
   size_t i;
-  for (i = 0; i < m_pSubFunctions.size() - 1; i++) {
+  for (i = 0; i + 1 < m_pSubFunctions.size(); i++) {
     if (input < m_bounds[i + 1])
       break;
   }
   input = Interpolate(input, m_bounds[i], m_bounds[i + 1], m_encode[i * 2],
                       m_encode[i * 2 + 1]);
   return m_pSubFunctions[i]
-      ->Call(pdfium::make_span(&input, 1), results)
+      ->Call(pdfium::span_from_ref(input), results)
       .has_value();
 }

@@ -9,8 +9,8 @@ source_set("fxcodec") {
   sources = [
     "basic/basicmodule.cpp",
     "basic/basicmodule.h",
-    "cfx_codec_memory.cpp",
-    "cfx_codec_memory.h",
+    "data_and_bytes_consumed.cpp",
+    "data_and_bytes_consumed.h",
     "fax/faxmodule.cpp",
     "fax/faxmodule.h",
     "flate/flatemodule.cpp",
@@ -73,18 +73,18 @@ source_set("fxcodec") {
     "../../:pdfium_strict_config",
     "../../:pdfium_noshorten_config",
   ]
-  include_dirs = []
+  public_deps = [ "../fxcrt" ]
   deps = [
     "../../third_party:lcms2",
     "../../third_party:libopenjpeg2",
     "../../third_party:zlib",
-    "../fxcrt",
     "../fxge",
     "//third_party:jpeg",
   ]
-
   if (pdf_enable_xfa) {
     sources += [
+      "cfx_codec_memory.cpp",
+      "cfx_codec_memory.h",
       "jpeg/jpeg_progressive_decoder.cpp",
       "jpeg/jpeg_progressive_decoder.h",
       "progressive_decoder.cpp",
@@ -141,6 +141,7 @@ pdfium_unittest_source_set("unittests") {
   sources = [
     "basic/a85_unittest.cpp",
     "basic/rle_unittest.cpp",
+    "flate/flatemodule_unittest.cpp",
     "jbig2/JBig2_BitStream_unittest.cpp",
     "jbig2/JBig2_Image_unittest.cpp",
     "jpx/jpx_unittest.cpp",
