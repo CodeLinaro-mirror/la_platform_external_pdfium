@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
+#include "build/build_config.h"
 #include "constants/annotation_common.h"
 #include "constants/annotation_flags.h"
 #include "core/fpdfapi/page/cpdf_form.h"
@@ -23,11 +25,11 @@
 #include "core/fpdfapi/render/cpdf_rendercontext.h"
 #include "core/fpdfapi/render/cpdf_renderoptions.h"
 #include "core/fpdfdoc/cpdf_generateap.h"
+#include "core/fxcrt/check.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
 #include "core/fxge/cfx_path.h"
 #include "core/fxge/cfx_renderdevice.h"
-#include "third_party/base/check.h"
 
 namespace {
 
@@ -225,9 +227,9 @@ void CPDF_Annot::SetPopupAnnotOpenState(bool bOpenState) {
     m_pPopupAnnot->SetOpenState(bOpenState);
 }
 
-absl::optional<CFX_FloatRect> CPDF_Annot::GetPopupAnnotRect() const {
+std::optional<CFX_FloatRect> CPDF_Annot::GetPopupAnnotRect() const {
   if (!m_pPopupAnnot)
-    return absl::nullopt;
+    return std::nullopt;
   return m_pPopupAnnot->GetRect();
 }
 
@@ -467,13 +469,19 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
   if (annot_flags & pdfium::annotation_flags::kHidden)
     return;
 
-  bool bPrinting = pDevice->GetDeviceType() == DeviceType::kPrinter;
-  if (bPrinting && (annot_flags & pdfium::annotation_flags::kPrint) == 0) {
+#if BUILDFLAG(IS_WIN)
+  bool is_printing = pDevice->GetDeviceType() == DeviceType::kPrinter;
+  if (is_printing && (annot_flags & pdfium::annotation_flags::kPrint) == 0) {
     return;
   }
-  if (!bPrinting && (annot_flags & pdfium::annotation_flags::kNoView)) {
+#else
+  const bool is_printing = false;
+#endif
+
+  if (!is_printing && (annot_flags & pdfium::annotation_flags::kNoView)) {
     return;
   }
+
   RetainPtr<const CPDF_Dictionary> pBS = m_pAnnotDict->GetDictFor("BS");
   char style_char;
   float width;
@@ -524,7 +532,7 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
     argb = ArgbEncode(0xff, R, G, B);
   }
   CFX_GraphStateData graph_state;
-  graph_state.m_LineWidth = width;
+  graph_state.set_line_width(width);
   if (style_char == 'U') {
     // TODO(https://crbug.com/237527): Handle the "Underline" border style
     // instead of drawing the rectangle border.
@@ -533,12 +541,14 @@ void CPDF_Annot::DrawBorder(CFX_RenderDevice* pDevice,
 
   if (style_char == 'D') {
     if (pDashArray) {
-      graph_state.m_DashArray =
+      std::vector<float> dash_array =
           ReadArrayElementsToVector(pDashArray.Get(), pDashArray->size());
-      if (graph_state.m_DashArray.size() % 2)
-        graph_state.m_DashArray.push_back(graph_state.m_DashArray.back());
+      if (dash_array.size() % 2) {
+        dash_array.push_back(dash_array.back());
+      }
+      graph_state.set_dash_array(std::move(dash_array));
     } else {
-      graph_state.m_DashArray = {3.0f, 3.0f};
+      graph_state.set_dash_array({3.0f, 3.0f});
     }
   }
 

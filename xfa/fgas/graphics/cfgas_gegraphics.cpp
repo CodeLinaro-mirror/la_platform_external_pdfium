@@ -8,17 +8,19 @@
 
 #include <math.h>
 
+#include <array>
 #include <iterator>
 #include <memory>
 #include <utility>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/span_util.h"
+#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_renderdevice.h"
 #include "core/fxge/cfx_unicodeencoding.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
-#include "third_party/base/check.h"
 #include "xfa/fgas/graphics/cfgas_gecolor.h"
 #include "xfa/fgas/graphics/cfgas_gepath.h"
 #include "xfa/fgas/graphics/cfgas_gepattern.h"
@@ -32,7 +34,7 @@ struct FX_HATCHDATA {
   uint8_t maskBits[64];
 };
 
-const FX_HATCHDATA kHatchBitmapData[] = {
+constexpr auto kHatchBitmapData = fxcrt::ToArray<const FX_HATCHDATA>({
     {16,  // Horizontal
      16,
      {
@@ -93,7 +95,7 @@ const FX_HATCHDATA kHatchBitmapData[] = {
          0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x24, 0x24, 0x00,
          0x00, 0x42, 0x42, 0x00, 0x00, 0x81, 0x81, 0x00, 0x00,
      }},
-};
+});
 
 const FX_HATCHDATA kHatchPlaceHolder = {
     0,
@@ -135,25 +137,26 @@ void CFGAS_GEGraphics::RestoreGraphState() {
 }
 
 void CFGAS_GEGraphics::SetLineCap(CFX_GraphStateData::LineCap lineCap) {
-  m_info.graphState.m_LineCap = lineCap;
+  m_info.graphState.set_line_cap(lineCap);
 }
 
-void CFGAS_GEGraphics::SetLineDash(float dashPhase,
-                                   pdfium::span<const float> dashArray) {
-  DCHECK(!dashArray.empty());
-  float scale = m_info.isActOnDash ? m_info.graphState.m_LineWidth : 1.0;
-  m_info.graphState.m_DashPhase = dashPhase;
-  m_info.graphState.m_DashArray.resize(dashArray.size());
-  for (size_t i = 0; i < dashArray.size(); ++i)
-    m_info.graphState.m_DashArray[i] = dashArray[i] * scale;
+void CFGAS_GEGraphics::SetLineDash(std::vector<float> dash_array) {
+  // For `dash_array` to be empty, call SetSolidLineDash() instead.
+  CHECK(!dash_array.empty());
+  const float scale = m_info.isActOnDash ? m_info.graphState.line_width() : 1.0;
+  for (float& f : dash_array) {
+    f *= scale;
+  }
+  m_info.graphState.set_dash_array(std::move(dash_array));
+  m_info.graphState.set_dash_phase(0);
 }
 
 void CFGAS_GEGraphics::SetSolidLineDash() {
-  m_info.graphState.m_DashArray.clear();
+  m_info.graphState.set_dash_array({});
 }
 
 void CFGAS_GEGraphics::SetLineWidth(float lineWidth) {
-  m_info.graphState.m_LineWidth = lineWidth;
+  m_info.graphState.set_line_width(lineWidth);
 }
 
 void CFGAS_GEGraphics::EnableActOnDash() {
@@ -242,11 +245,13 @@ void CFGAS_GEGraphics::FillPathWithPattern(
     const CFGAS_GEPath& path,
     const CFX_FillRenderOptions& fill_options,
     const CFX_Matrix& matrix) {
-  RetainPtr<CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
+  RetainPtr<const CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
   int32_t width = bitmap->GetWidth();
   int32_t height = bitmap->GetHeight();
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
-  bmp->Create(width, height, FXDIB_Format::kArgb);
+  // TODO(crbug.com/355630556): Consider adding support for
+  // `FXDIB_Format::kBgraPremul`
+  CHECK(bmp->Create(width, height, FXDIB_Format::kBgra));
   m_renderDevice->GetDIBits(bmp, 0, 0);
 
   CFGAS_GEPattern::HatchStyle hatchStyle =
@@ -255,10 +260,10 @@ void CFGAS_GEGraphics::FillPathWithPattern(
       GetHatchBitmapData(static_cast<size_t>(hatchStyle));
 
   auto mask = pdfium::MakeRetain<CFX_DIBitmap>();
-  mask->Create(data.width, data.height, FXDIB_Format::k1bppMask);
-  fxcrt::spancpy(
-      mask->GetWritableBuffer(),
-      pdfium::make_span(data.maskBits).first(mask->GetPitch() * data.height));
+  CHECK(mask->Create(data.width, data.height, FXDIB_Format::k1bppMask));
+  fxcrt::Copy(
+      pdfium::make_span(data.maskBits).first(mask->GetPitch() * data.height),
+      mask->GetWritableBuffer());
   const CFX_FloatRect rectf =
       matrix.TransformRect(path.GetPath().GetBoundingBox());
   const FX_RECT rect = rectf.ToRoundedFxRect();
@@ -281,7 +286,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
     const CFGAS_GEPath& path,
     const CFX_FillRenderOptions& fill_options,
     const CFX_Matrix& matrix) {
-  RetainPtr<CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
+  RetainPtr<const CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
   int32_t width = bitmap->GetWidth();
   int32_t height = bitmap->GetHeight();
   float start_x = m_info.fillColor.GetShading()->GetBeginPoint().x;
@@ -289,7 +294,9 @@ void CFGAS_GEGraphics::FillPathWithShading(
   float end_x = m_info.fillColor.GetShading()->GetEndPoint().x;
   float end_y = m_info.fillColor.GetShading()->GetEndPoint().y;
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
-  bmp->Create(width, height, FXDIB_Format::kArgb);
+  // TODO(crbug.com/355630556): Consider adding support for
+  // `FXDIB_Format::kBgraPremul`
+  CHECK(bmp->Create(width, height, FXDIB_Format::kBgra));
   m_renderDevice->GetDIBits(bmp, 0, 0);
   bool result = false;
   switch (m_info.fillColor.GetShading()->GetType()) {
@@ -298,8 +305,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
       float y_span = end_y - start_y;
       float axis_len_square = (x_span * x_span) + (y_span * y_span);
       for (int32_t row = 0; row < height; row++) {
-        uint32_t* dib_buf =
-            reinterpret_cast<uint32_t*>(bmp->GetWritableScanline(row).data());
+        auto dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row);
         for (int32_t column = 0; column < width; column++) {
           float scale = 0.0f;
           if (axis_len_square) {
@@ -317,9 +323,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
               scale = 1.0f;
             }
           }
-          int32_t index =
-              static_cast<int32_t>(scale * (CFGAS_GEShading::kSteps - 1));
-          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(index);
+          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(scale);
         }
       }
       result = true;
@@ -332,8 +336,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
                 ((start_y - end_y) * (start_y - end_y)) -
                 ((start_r - end_r) * (start_r - end_r));
       for (int32_t row = 0; row < height; row++) {
-        uint32_t* dib_buf =
-            reinterpret_cast<uint32_t*>(bmp->GetWritableScanline(row).data());
+        auto dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row);
         for (int32_t column = 0; column < width; column++) {
           float x = (float)(column);
           float y = (float)(row);
@@ -379,8 +382,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
               continue;
             s = 1.0f;
           }
-          int index = static_cast<int32_t>(s * (CFGAS_GEShading::kSteps - 1));
-          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(index);
+          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(s);
         }
       }
       result = true;
@@ -412,22 +414,10 @@ void CFGAS_GEGraphics::SetDIBitsWithMatrix(RetainPtr<CFX_DIBBase> source,
 
 CFGAS_GEGraphics::TInfo::TInfo() = default;
 
-CFGAS_GEGraphics::TInfo::TInfo(const TInfo& info)
-    : graphState(info.graphState),
-      CTM(info.CTM),
-      isActOnDash(info.isActOnDash),
-      strokeColor(info.strokeColor),
-      fillColor(info.fillColor) {}
+CFGAS_GEGraphics::TInfo::TInfo(const TInfo& info) = default;
 
 CFGAS_GEGraphics::TInfo& CFGAS_GEGraphics::TInfo::operator=(
-    const TInfo& other) {
-  graphState = other.graphState;
-  CTM = other.CTM;
-  isActOnDash = other.isActOnDash;
-  strokeColor = other.strokeColor;
-  fillColor = other.fillColor;
-  return *this;
-}
+    const TInfo& other) = default;
 
 CFGAS_GEGraphics::StateRestorer::StateRestorer(CFGAS_GEGraphics* graphics)
     : graphics_(graphics) {

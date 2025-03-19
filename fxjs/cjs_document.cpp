@@ -20,6 +20,8 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdfdoc/cpdf_interactiveform.h"
 #include "core/fpdfdoc/cpdf_nametree.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/span.h"
 #include "fpdfsdk/cpdfsdk_annotiteration.h"
 #include "fpdfsdk/cpdfsdk_formfillenvironment.h"
 #include "fpdfsdk/cpdfsdk_interactiveform.h"
@@ -31,7 +33,6 @@
 #include "fxjs/cjs_field.h"
 #include "fxjs/cjs_icon.h"
 #include "fxjs/js_resources.h"
-#include "third_party/base/check.h"
 #include "v8/include/v8-container.h"
 
 const JSPropertySpec CJS_Document::PropertySpecs[] = {
@@ -207,44 +208,41 @@ CJS_Result CJS_Document::set_page_num(CJS_Runtime* pRuntime,
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::addAnnot(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::addAnnot(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   // Not supported, but do not return an error.
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::addField(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::addField(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   // Not supported, but do not return an error.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::exportAsText(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported, but do not return an error.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::exportAsFDF(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported, but do not return an error.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::exportAsXFDF(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported, but do not return an error.
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::getField(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getField(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   if (params.empty())
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -262,7 +260,7 @@ CJS_Result CJS_Document::getField(
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
   auto* pJSField = static_cast<CJS_Field*>(
-      CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pFieldObj));
+      CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pFieldObj));
   if (!pJSField)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -273,7 +271,7 @@ CJS_Result CJS_Document::getField(
 // Gets the name of the nth field in the document
 CJS_Result CJS_Document::getNthFieldName(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
   if (!m_pFormFillEnv)
@@ -293,32 +291,31 @@ CJS_Result CJS_Document::getNthFieldName(
 
 CJS_Result CJS_Document::importAnFDF(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::importAnXFDF(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::importTextData(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::mailDoc(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::mailDoc(CJS_Runtime* pRuntime,
+                                 pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
-  std::vector<v8::Local<v8::Value>> newParams = ExpandKeywordParams(
+  v8::LocalVector<v8::Value> newParams = ExpandKeywordParams(
       pRuntime, params, 6, "bUI", "cTo", "cCc", "cBcc", "cSubject", "cMsg");
 
   bool bUI = true;
@@ -355,9 +352,8 @@ CJS_Result CJS_Document::mailDoc(
 // exports the form data and mails the resulting fdf file as an attachment to
 // all recipients.
 // comment: need reader supports
-CJS_Result CJS_Document::mailForm(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::mailForm(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -367,10 +363,11 @@ CJS_Result CJS_Document::mailForm(
 
   CPDFSDK_InteractiveForm* pInteractiveForm = GetSDKInteractiveForm();
   ByteString sTextBuf = pInteractiveForm->ExportFormToFDFTextBuf();
-  if (sTextBuf.IsEmpty())
-    return CJS_Result::Failure(L"Bad FDF format.");
+  if (sTextBuf.IsEmpty()) {
+    return CJS_Result::Failure(WideString::FromASCII("Bad FDF format."));
+  }
 
-  std::vector<v8::Local<v8::Value>> newParams = ExpandKeywordParams(
+  v8::LocalVector<v8::Value> newParams = ExpandKeywordParams(
       pRuntime, params, 6, "bUI", "cTo", "cCc", "cBcc", "cSubject", "cMsg");
 
   bool bUI = true;
@@ -398,16 +395,15 @@ CJS_Result CJS_Document::mailForm(
     cMsg = pRuntime->ToWideString(newParams[5]);
 
   pRuntime->BeginBlock();
-  m_pFormFillEnv->JS_docmailForm(sTextBuf.raw_span(), bUI, cTo, cSubject, cCc,
-                                 cBcc, cMsg);
+  m_pFormFillEnv->JS_docmailForm(sTextBuf.unsigned_span(), bUI, cTo, cSubject,
+                                 cCc, cBcc, cMsg);
   pRuntime->EndBlock();
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::print(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
-  std::vector<v8::Local<v8::Value>> newParams = ExpandKeywordParams(
+CJS_Result CJS_Document::print(CJS_Runtime* pRuntime,
+                               pdfium::span<v8::Local<v8::Value>> params) {
+  v8::LocalVector<v8::Value> newParams = ExpandKeywordParams(
       pRuntime, params, 8, "bUI", "nStart", "nEnd", "bSilent", "bShrinkToFit",
       "bPrintAsImage", "bReverse", "bAnnotations");
 
@@ -460,7 +456,7 @@ CJS_Result CJS_Document::print(
 // note: if the filed name is not rational, adobe is dumb for it.
 CJS_Result CJS_Document::removeField(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
   if (!m_pFormFillEnv)
@@ -507,9 +503,8 @@ CJS_Result CJS_Document::removeField(
 // comment:
 // note: if the fields names r not rational, aodbe is dumb for it.
 
-CJS_Result CJS_Document::resetForm(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::resetForm(CJS_Runtime* pRuntime,
+                                   pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -552,22 +547,20 @@ CJS_Result CJS_Document::resetForm(
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::saveAs(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::saveAs(CJS_Runtime* pRuntime,
+                                pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::syncAnnotScan(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::submitForm(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::submitForm(CJS_Runtime* pRuntime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   size_t nSize = params.size();
   if (nSize < 1)
     return CJS_Result::Failure(JSMessage::kParamError);
@@ -979,27 +972,23 @@ CJS_Result CJS_Document::set_layout(CJS_Runtime* pRuntime,
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::addLink(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::addLink(CJS_Runtime* pRuntime,
+                                 pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::closeDoc(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::closeDoc(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::getPageBox(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getPageBox(CJS_Runtime* pRuntime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::getAnnot(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getAnnot(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 2)
     return CJS_Result::Failure(JSMessage::kParamError);
   if (!m_pFormFillEnv)
@@ -1029,7 +1018,7 @@ CJS_Result CJS_Document::getAnnot(
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
   auto* pJS_Annot = static_cast<CJS_Annot*>(
-      CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pObj));
+      CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pObj));
   if (!pJS_Annot)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1037,9 +1026,8 @@ CJS_Result CJS_Document::getAnnot(
   return CJS_Result::Success(pJS_Annot->ToV8Object());
 }
 
-CJS_Result CJS_Document::getAnnots(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getAnnots(CJS_Runtime* pRuntime,
+                                   pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1064,7 +1052,7 @@ CJS_Result CJS_Document::getAnnots(
         return CJS_Result::Failure(JSMessage::kBadObjectError);
 
       auto* pJS_Annot = static_cast<CJS_Annot*>(
-          CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pObj));
+          CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pObj));
       pJS_Annot->SetSDKAnnot(pSDKAnnotCur->AsBAAnnot());
       pRuntime->PutArrayElement(
           annots, i,
@@ -1075,33 +1063,29 @@ CJS_Result CJS_Document::getAnnots(
   return CJS_Result::Success(annots);
 }
 
-CJS_Result CJS_Document::getAnnot3D(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getAnnot3D(CJS_Runtime* pRuntime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success(pRuntime->NewUndefined());
 }
 
 CJS_Result CJS_Document::getAnnots3D(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::getOCGs(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getOCGs(CJS_Runtime* pRuntime,
+                                 pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::getLinks(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getLinks(CJS_Runtime* pRuntime,
+                                  pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::addIcon(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::addIcon(CJS_Runtime* pRuntime,
+                                 pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 2)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -1132,7 +1116,7 @@ CJS_Result CJS_Document::get_icons(CJS_Runtime* pRuntime) {
       return CJS_Result::Failure(JSMessage::kBadObjectError);
 
     auto* pJS_Icon = static_cast<CJS_Icon*>(
-        CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pObj));
+        CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pObj));
     pJS_Icon->SetIconName(name);
     pRuntime->PutArrayElement(Icons, i++,
                               pJS_Icon
@@ -1147,9 +1131,8 @@ CJS_Result CJS_Document::set_icons(CJS_Runtime* pRuntime,
   return CJS_Result::Failure(JSMessage::kReadOnlyError);
 }
 
-CJS_Result CJS_Document::getIcon(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getIcon(CJS_Runtime* pRuntime,
+                                 pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
 
@@ -1164,7 +1147,7 @@ CJS_Result CJS_Document::getIcon(
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
   auto* pJSIcon = static_cast<CJS_Icon*>(
-      CFXJS_Engine::GetObjectPrivate(pRuntime->GetIsolate(), pObj));
+      CFXJS_Engine::GetBinding(pRuntime->GetIsolate(), pObj));
   if (!pJSIcon)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1172,16 +1155,15 @@ CJS_Result CJS_Document::getIcon(
   return CJS_Result::Success(pJSIcon->ToV8Object());
 }
 
-CJS_Result CJS_Document::removeIcon(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::removeIcon(CJS_Runtime* pRuntime,
+                                    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, no supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::createDataObject(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not implemented.
   return CJS_Result::Success();
 }
@@ -1197,7 +1179,7 @@ CJS_Result CJS_Document::set_media(CJS_Runtime* pRuntime,
 
 CJS_Result CJS_Document::calculateNow(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1223,7 +1205,7 @@ CJS_Result CJS_Document::set_collab(CJS_Runtime* pRuntime,
 
 CJS_Result CJS_Document::getPageNthWord(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1253,7 +1235,7 @@ CJS_Result CJS_Document::getPageNthWord(
   int nWords = 0;
   WideString swRet;
   for (auto& pPageObj : *page) {
-    if (pPageObj->IsText()) {
+    if (pPageObj->IsActive() && pPageObj->IsText()) {
       CPDF_TextObject* pTextObj = pPageObj->AsText();
       int nObjWords = pTextObj->CountWords();
       if (nWords + nObjWords >= nWordNo) {
@@ -1265,13 +1247,13 @@ CJS_Result CJS_Document::getPageNthWord(
   }
 
   if (bStrip)
-    swRet.Trim();
+    swRet.TrimWhitespace();
   return CJS_Result::Success(pRuntime->NewString(swRet.AsStringView()));
 }
 
 CJS_Result CJS_Document::getPageNthWordQuads(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1284,7 +1266,7 @@ CJS_Result CJS_Document::getPageNthWordQuads(
 
 CJS_Result CJS_Document::getPageNumWords(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (!m_pFormFillEnv)
     return CJS_Result::Failure(JSMessage::kBadObjectError);
 
@@ -1308,15 +1290,16 @@ CJS_Result CJS_Document::getPageNumWords(
 
   int nWords = 0;
   for (auto& pPageObj : *page) {
-    if (pPageObj->IsText())
+    if (pPageObj->IsActive() && pPageObj->IsText()) {
       nWords += pPageObj->AsText()->CountWords();
+    }
   }
   return CJS_Result::Success(pRuntime->NewNumber(nWords));
 }
 
 CJS_Result CJS_Document::getPrintParams(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   return CJS_Result::Failure(JSMessage::kNotSupportedError);
 }
 
@@ -1340,42 +1323,41 @@ CJS_Result CJS_Document::set_zoom_type(CJS_Runtime* pRuntime,
 
 CJS_Result CJS_Document::deletePages(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::extractPages(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::insertPages(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::replacePages(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
-CJS_Result CJS_Document::getURL(
-    CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+CJS_Result CJS_Document::getURL(CJS_Runtime* pRuntime,
+                                pdfium::span<v8::Local<v8::Value>> params) {
   // Unsafe, not supported.
   return CJS_Result::Success();
 }
 
 CJS_Result CJS_Document::gotoNamedDest(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& params) {
+    pdfium::span<v8::Local<v8::Value>> params) {
   if (params.size() != 1)
     return CJS_Result::Failure(JSMessage::kParamError);
 

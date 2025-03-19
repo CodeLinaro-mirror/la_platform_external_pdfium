@@ -7,21 +7,22 @@
 #ifndef CORE_FPDFAPI_PAGE_CPDF_STREAMCONTENTPARSER_H_
 #define CORE_FPDFAPI_PAGE_CPDF_STREAMCONTENTPARSER_H_
 
-#include <map>
+#include <array>
 #include <memory>
 #include <stack>
 #include <vector>
 
 #include "core/fpdfapi/page/cpdf_contentmarks.h"
 #include "core/fpdfapi/page/cpdf_form.h"
+#include "core/fpdfapi/page/cpdf_pageobjectholder.h"
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/fx_number.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_path.h"
-#include "third_party/base/containers/span.h"
 
 class CPDF_AllStates;
 class CPDF_ColorSpace;
@@ -32,7 +33,6 @@ class CPDF_Image;
 class CPDF_ImageObject;
 class CPDF_Object;
 class CPDF_PageObject;
-class CPDF_PageObjectHolder;
 class CPDF_Pattern;
 class CPDF_ShadingPattern;
 class CPDF_Stream;
@@ -41,6 +41,9 @@ class CPDF_TextObject;
 
 class CPDF_StreamContentParser {
  public:
+  static void InitializeGlobals();
+  static void DestroyGlobals();
+
   CPDF_StreamContentParser(CPDF_Document* pDoc,
                            RetainPtr<CPDF_Dictionary> pPageResources,
                            RetainPtr<CPDF_Dictionary> pParentResources,
@@ -61,6 +64,7 @@ class CPDF_StreamContentParser {
   bool IsColored() const { return m_bColored; }
   pdfium::span<const float> GetType3Data() const { return m_Type3Data; }
   RetainPtr<CPDF_Font> FindFont(const ByteString& name);
+  CPDF_PageObjectHolder::CTMMap TakeAllCTMs();
 
   static ByteStringView FindKeyAbbreviationForTesting(ByteStringView abbr);
   static ByteStringView FindValueAbbreviationForTesting(ByteStringView abbr);
@@ -82,9 +86,6 @@ class CPDF_StreamContentParser {
 
   static constexpr int kParamBufSize = 16;
 
-  using OpCodes = std::map<uint32_t, void (CPDF_StreamContentParser::*)()>;
-  static OpCodes InitializeOpCodes();
-
   void AddNameParam(ByteStringView bsName);
   void AddNumberParam(ByteStringView str);
   void AddObjectParam(RetainPtr<CPDF_Object> pObj);
@@ -104,10 +105,9 @@ class CPDF_StreamContentParser {
   // Makes a matrix from {GetNumber(5), ..., GetNumber(0)}.
   CFX_Matrix GetMatrix() const;
   void OnOperator(ByteStringView op);
-  void AddTextObject(const ByteString* pStrs,
-                     float fInitKerning,
-                     const std::vector<float>& kernings,
-                     size_t nSegs);
+  void AddTextObject(pdfium::span<const ByteString> strings,
+                     pdfium::span<const float> kernings,
+                     float initial_kerning);
   float GetHorizontalTextSize(float fKerning) const;
   float GetVerticalTextSize(float fKerning) const;
 
@@ -240,8 +240,9 @@ class CPDF_StreamContentParser {
   RetainPtr<CPDF_Image> m_pLastImage;
   bool m_bColored = false;
   std::vector<std::unique_ptr<CPDF_AllStates>> m_StateStack;
-  float m_Type3Data[6] = {0.0f};
-  ContentParam m_ParamBuf[kParamBufSize];
+  std::array<float, 6> m_Type3Data = {};
+  std::array<ContentParam, kParamBufSize> m_ParamBuf;
+  CPDF_PageObjectHolder::CTMMap m_AllCTMs;
 
   // The merged stream offsets at which a content stream ends and another
   // begins.

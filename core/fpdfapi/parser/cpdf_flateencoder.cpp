@@ -13,8 +13,9 @@
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
-#include "third_party/base/check.h"
-#include "third_party/base/numerics/safe_conversions.h"
+#include "core/fxcodec/flate/flatemodule.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/numerics/safe_conversions.h"
 
 CPDF_FlateEncoder::CPDF_FlateEncoder(RetainPtr<const CPDF_Stream> pStream,
                                      bool bFlateEncode)
@@ -40,10 +41,10 @@ CPDF_FlateEncoder::CPDF_FlateEncoder(RetainPtr<const CPDF_Stream> pStream,
   }
 
   // TODO(thestig): Move to Init() and check for empty return value?
-  m_Data = ::FlateEncode(m_pAcc->GetSpan());
+  m_Data = FlateModule::Encode(m_pAcc->GetSpan());
   m_pClonedDict = ToDictionary(pStream->GetDict()->Clone());
   m_pClonedDict->SetNewFor<CPDF_Number>(
-      "Length", pdfium::base::checked_cast<int>(GetSpan().size()));
+      "Length", pdfium::checked_cast<int>(GetSpan().size()));
   m_pClonedDict->SetNewFor<CPDF_Name>("Filter", "FlateDecode");
   m_pClonedDict->RemoveFor(pdfium::stream::kDecodeParms);
   DCHECK(!m_pDict);
@@ -80,5 +81,5 @@ const CPDF_Dictionary* CPDF_FlateEncoder::GetDict() const {
 pdfium::span<const uint8_t> CPDF_FlateEncoder::GetSpan() const {
   if (is_owned())
     return absl::get<DataVector<uint8_t>>(m_Data);
-  return absl::get<pdfium::span<const uint8_t>>(m_Data);
+  return absl::get<pdfium::raw_span<const uint8_t>>(m_Data);
 }

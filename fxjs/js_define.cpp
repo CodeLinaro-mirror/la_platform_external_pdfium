@@ -11,20 +11,20 @@
 
 #include <algorithm>
 #include <limits>
-#include <vector>
 
+#include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/span.h"
 #include "fxjs/cjs_document.h"
 #include "fxjs/cjs_object.h"
 #include "fxjs/fx_date_helpers.h"
 #include "fxjs/fxv8.h"
-#include "third_party/base/check.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 
 void JSDestructor(v8::Local<v8::Object> obj) {
-  CFXJS_Engine::SetObjectPrivate(obj, nullptr);
+  CFXJS_Engine::SetBinding(obj, nullptr);
 }
 
 double JS_DateParse(v8::Isolate* pIsolate, const WideString& str) {
@@ -59,14 +59,14 @@ double JS_DateParse(v8::Isolate* pIsolate, const WideString& str) {
   return isfinite(date) ? FX_LocalTime(date) : date;
 }
 
-std::vector<v8::Local<v8::Value>> ExpandKeywordParams(
+v8::LocalVector<v8::Value> ExpandKeywordParams(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& originals,
+    pdfium::span<v8::Local<v8::Value>> originals,
     size_t nKeywords,
     ...) {
   DCHECK(nKeywords);
 
-  std::vector<v8::Local<v8::Value>> result(nKeywords, v8::Local<v8::Value>());
+  v8::LocalVector<v8::Value> result(pRuntime->GetIsolate(), nKeywords);
   size_t size = std::min(originals.size(), nKeywords);
   for (size_t i = 0; i < size; ++i)
     result[i] = originals[i];

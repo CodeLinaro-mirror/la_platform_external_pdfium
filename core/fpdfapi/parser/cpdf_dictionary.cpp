@@ -18,9 +18,9 @@
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
+#include "core/fxcrt/check.h"
+#include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_stream.h"
-#include "third_party/base/check.h"
-#include "third_party/base/containers/contains.h"
 
 CPDF_Dictionary::CPDF_Dictionary()
     : CPDF_Dictionary(WeakPtr<ByteStringPool>()) {}
@@ -265,8 +265,8 @@ std::vector<ByteString> CPDF_Dictionary::GetKeys() const {
 }
 
 void CPDF_Dictionary::SetFor(const ByteString& key,
-                             RetainPtr<CPDF_Object> pObj) {
-  (void)SetForInternal(key, std::move(pObj));
+                             RetainPtr<CPDF_Object> object) {
+  (void)SetForInternal(key, std::move(object));
 }
 
 CPDF_Object* CPDF_Dictionary::SetForInternal(const ByteString& key,
@@ -276,7 +276,8 @@ CPDF_Object* CPDF_Dictionary::SetForInternal(const ByteString& key,
     m_Map.erase(key);
     return nullptr;
   }
-  DCHECK(pObj->IsInline());
+  CHECK(pObj->IsInline());
+  CHECK(!pObj->IsStream());
   CPDF_Object* pRet = pObj.Get();
   m_Map[MaybeIntern(key)] = std::move(pObj);
   return pRet;
