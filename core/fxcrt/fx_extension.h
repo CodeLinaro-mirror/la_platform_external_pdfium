@@ -48,8 +48,12 @@ inline int32_t FXSYS_towlower(wchar_t c) {
 }
 
 inline int32_t FXSYS_towupper(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_toupper(c);
     else return towupper(c);
+#else
+    return towupper(c);
+#endif
 }
 
 inline bool FXSYS_IsLowerASCII(int32_t c) {
@@ -65,18 +69,30 @@ inline char FXSYS_ToUpperASCII(char c) {
 }
 
 inline bool FXSYS_iswalpha(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isalpha(c);
     else return iswalpha(c);
+#else
+    return iswalpha(c);
+#endif
 }
 
 inline bool FXSYS_iswalnum(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isalnum(c);
     else return iswalnum(c);
+#else
+    return iswalnum(c);
+#endif
 }
 
 inline bool FXSYS_iswspace(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isspace(c);
     else return iswspace(c);
+#else
+    return iswspace(c);
+#endif
 }
 
 inline bool FXSYS_IsOctalDigit(char c) {
