@@ -31,32 +31,3 @@ cc_library_static {
         "external/freetype/include/freetype",
     ],
 }
-
-cc_library_static {
-    name: "libpdfium-pwl-android-r-compatible",
-    defaults: ["pdfium-core"],
-
-    visibility: ["//external/pdfium:__subpackages__"],
-
-    static_libs: [
-        "libpdfium-constants",
-        "libpdfium-font",
-        "libpdfium-render",
-        "libpdfium-fpdfdoc",
-        "libpdfium-fxcrt",
-        "libpdfium-fxge",
-    ],
-
-    srcs: [
-        "*.cpp",
-    ],
-
-    include_dirs: [
-        "external/freetype/include",
-        "external/freetype/include/freetype",
-    ],
-
-    cflags: [
-        "-DANDROID_R_COMPATIBLE",
-    ],
-}
