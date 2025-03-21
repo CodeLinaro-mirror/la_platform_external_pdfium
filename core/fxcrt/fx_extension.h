@@ -33,18 +33,30 @@ UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
                                            size_t count);
 
 inline bool FXSYS_iswlower(int32_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_islower(c);
     else return iswlower(c);
+#else
+    return iswlower(c);
+#endif
 }
 
 inline bool FXSYS_iswupper(int32_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isupper(c);
     else return iswupper(c);
+#else
+    return iswupper(c);
+#endif
 }
 
 inline int32_t FXSYS_towlower(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_tolower(c);
     else return towlower(c);
+#else
+    return towlower(c);
+#endif
 }
 
 inline int32_t FXSYS_towupper(wchar_t c) {
