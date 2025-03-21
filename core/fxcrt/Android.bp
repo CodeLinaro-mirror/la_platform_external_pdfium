@@ -11,7 +11,10 @@ cc_library_static {
     name: "libpdfium-fxcrt",
     defaults: ["pdfium-core"],
 
-    visibility: ["//external/pdfium:__subpackages__", "//cts/hostsidetests/securitybulletin/securityPatch/CVE-2016-8332"],
+    visibility: [
+        "//external/pdfium:__subpackages__",
+        "//cts/hostsidetests/securitybulletin/securityPatch/CVE-2016-8332",
+    ],
 
     export_shared_lib_headers: [
         "libicu",
@@ -40,6 +43,50 @@ cc_library_static {
     srcs: [
         "*.cpp",
         "xml/*.cpp",
-        "debug/*.cc"
+        "debug/*.cc",
+    ],
+}
+
+cc_library_static {
+    name: "libpdfium-fxcrt-android-r-compatible",
+    defaults: ["pdfium-core"],
+
+    visibility: [
+        "//external/pdfium:__subpackages__",
+        "//cts/hostsidetests/securitybulletin/securityPatch/CVE-2016-8332",
+    ],
+
+    export_shared_lib_headers: [
+        "libicu",
+    ],
+
+    static_libs: [
+        "libpdfium-third_party-base",
+    ],
+
+    shared_libs: [
+        "libicu",
+    ],
+
+    exclude_srcs: [
+        // is_win
+        "cfx_fileaccess_windows.cpp",
+        "fx_folder_windows.cpp",
+        // pdf_enable_xfa
+        "cfx_memorystream.cpp",
+        // pdf_use_partition_alloc
+        "fx_memory_pa.cpp",
+        // test module
+        "fake_time_test.cpp",
+    ],
+
+    srcs: [
+        "*.cpp",
+        "xml/*.cpp",
+        "debug/*.cc",
+    ],
+
+    cflags: [
+        "-DANDROID_R_COMPATIBLE",
     ],
 }
