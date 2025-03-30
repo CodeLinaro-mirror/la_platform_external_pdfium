@@ -205,4 +205,36 @@ cc_library_static {
     export_include_dirs: ["public"],
 }
 
+cc_library_static {
+    name: "libpdfium_static_android_r_compatible",
+    defaults: ["pdfium-core"],
+
+    whole_static_libs: [
+        "libpdfium-fpdfsdk",
+        "libpdfium-agg",
+        "libpdfium-cmaps",
+        "libpdfium-constants",
+        "libpdfium-edit",
+        "libpdfium-fdrm",
+        "libpdfium-font",
+        "libpdfium-formfiller",
+        "libpdfium-fpdfdoc",
+        "libpdfium-fpdftext-android-r-compatible",
+        "libpdfium-fxcodec",
+        "libpdfium-fxcrt-android-r-compatible",
+        "libpdfium-fxge",
+        "libpdfium-fxjs",
+        "libpdfium-libopenjpeg2",
+        "libpdfium-page",
+        "libpdfium-parser",
+        "libpdfium-pwl-android-r-compatible",
+        "libpdfium-render",
+        "libpdfium-skia_shared",
+        "libpdfium-third_party-base",
+        "libpdfium-lcms2",
+    ],
+
+    export_include_dirs: ["public"],
+}
+
 subdirs = ["third_party"]

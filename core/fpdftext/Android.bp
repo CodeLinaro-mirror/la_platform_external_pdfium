@@ -24,3 +24,25 @@ cc_library_static {
         "*.cpp",
     ],
 }
+
+cc_library_static {
+    name: "libpdfium-fpdftext-android-r-compatible",
+    defaults: ["pdfium-core"],
+
+    visibility: ["//external/pdfium:__subpackages__"],
+
+    static_libs: [
+        "libpdfium-font",
+        "libpdfium-page",
+        "libpdfium-parser",
+        "libpdfium-fxcrt",
+    ],
+
+    srcs: [
+        "*.cpp",
+    ],
+
+    cflags: [
+        "-DANDROID_R_COMPATIBLE",
+    ],
+}
