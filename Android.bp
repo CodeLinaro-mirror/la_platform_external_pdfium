@@ -40,6 +40,8 @@ license {
 
 cc_defaults {
     name: "pdfium-common",
+    // Upstream doesn't support C++23 yet: https://issues.chromium.org/issues/388068055
+    cpp_std: "gnu++20",
     cflags: [
         "-O3",
         "-fstrict-aliasing",
