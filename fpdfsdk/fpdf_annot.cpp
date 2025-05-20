@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "constants/annotation_common.h"
+#include "core/fpdfapi/edit/cpdf_contentstream_write_utils.h"
 #include "core/fpdfapi/edit/cpdf_pagecontentgenerator.h"
 #include "core/fpdfapi/page/cpdf_annotcontext.h"
 #include "core/fpdfapi/page/cpdf_form.h"
@@ -1382,6 +1383,46 @@ FPDFAnnot_GetFontSize(FPDF_FORMHANDLE hHandle,
   }
 
   *value = widget->GetFontSize();
+  return true;
+}
+
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFAnnot_SetFontColor(FPDF_FORMHANDLE handle,
+                       FPDF_ANNOTATION annot,
+                       unsigned int R,
+                       unsigned int G,
+                       unsigned int B) {
+  RetainPtr<CPDF_Dictionary> annot_dict =
+      GetMutableAnnotDictFromFPDFAnnotation(annot);
+  if (!annot_dict || R > 255 || G > 255 || B > 255) {
+    return false;
+  }
+
+  const CPDF_Annot::Subtype subtype = CPDF_Annot::StringToAnnotSubtype(
+      annot_dict->GetNameFor(pdfium::annotation::kSubtype));
+  if (subtype != CPDF_Annot::Subtype::FREETEXT) {
+    // TODO(thestig): Consider adding widget support to mirror
+    // FPDFAnnot_GetFontColor().
+    return false;
+  }
+
+  CPDFSDK_InteractiveForm* form = FormHandleToInteractiveForm(handle);
+  if (!form) {
+    return false;
+  }
+
+  bool generated = CPDF_GenerateAP::GenerateDefaultAppearanceWithColor(
+      form->GetInteractiveForm()->document(), annot_dict, CFX_Color(R, G, B));
+  if (!generated) {
+    return false;
+  }
+
+  // Remove the appearance stream. Otherwise PDF viewers will render that and
+  // not use the new color.
+  //
+  // TODO(thestig) When GenerateDefaultAppearanceWithColor() properly updates
+  // the annotation's appearance stream, remove this.
+  annot_dict->RemoveFor(pdfium::annotation::kAP);
   return true;
 }
 
