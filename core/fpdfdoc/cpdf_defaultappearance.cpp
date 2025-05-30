@@ -57,26 +57,24 @@ bool FindTagParamFromStart(CPDF_SimpleParser* parser,
 CPDF_DefaultAppearance::CPDF_DefaultAppearance(const ByteString& csDA)
     : m_csDA(csDA) {}
 
-CPDF_DefaultAppearance::CPDF_DefaultAppearance(
-    const CPDF_DefaultAppearance& cDA) = default;
-
 CPDF_DefaultAppearance::~CPDF_DefaultAppearance() = default;
 
 std::optional<ByteString> CPDF_DefaultAppearance::GetFont(
-    float* fFontSize) const {
+    float *fFontSize) const {
   *fFontSize = 0.0f;
   if (m_csDA.IsEmpty())
     return std::nullopt;
 
-  ByteString csFontNameTag;
   CPDF_SimpleParser syntax(m_csDA.AsStringView().unsigned_span());
-  if (FindTagParamFromStart(&syntax, "Tf", 2)) {
-    csFontNameTag = ByteString(syntax.GetWord());
-    csFontNameTag.Delete(0, 1);
-    *fFontSize = StringToFloat(syntax.GetWord());
+  if (!FindTagParamFromStart(&syntax, "Tf", 2)) {
+    return ByteString();
   }
-  return PDF_NameDecode(csFontNameTag.AsStringView());
+
+  ByteString name = PDF_NameDecode(syntax.GetWord().Substr(1));
+  *fFontSize = StringToFloat(syntax.GetWord());
+  return name;
 }
+
 
 std::optional<CFX_Color> CPDF_DefaultAppearance::GetColor() const {
   if (m_csDA.IsEmpty())
