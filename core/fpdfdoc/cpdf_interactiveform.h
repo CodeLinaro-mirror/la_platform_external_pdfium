@@ -105,6 +105,7 @@ class CPDF_InteractiveForm {
   const std::vector<UnownedPtr<CPDF_FormControl>>& GetControlsForField(
       const CPDF_FormField* field);
 
+  CPDF_Document* document() { return m_pDocument; }
  private:
   void LoadField(RetainPtr<CPDF_Dictionary> field_dict, int nLevel);
   void AddTerminalField(RetainPtr<CPDF_Dictionary> field_dict);
