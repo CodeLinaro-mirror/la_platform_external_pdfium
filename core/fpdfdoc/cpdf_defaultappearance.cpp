@@ -9,13 +9,29 @@
 #include <algorithm>
 #include <vector>
 
+#include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_simple_parser.h"
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
+#include "core/fpdfdoc/cpdf_formfield.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxge/cfx_color.h"
 
 namespace {
+
+ByteString GetDefaultAppearanceString(const CPDF_Dictionary* annot_dict,
+                                          const CPDF_Dictionary* acroform_dict) {
+  ByteString default_appearance_string;
+  RetainPtr<const CPDF_Object> default_appearance_object =
+          CPDF_FormField::GetFieldAttrForDict(annot_dict, "DA");
+  if (default_appearance_object) {
+    default_appearance_string = default_appearance_object->GetString();
+  }
+  if (default_appearance_string.IsEmpty() && acroform_dict) {
+    default_appearance_string = acroform_dict->GetByteStringFor("DA");
+  }
+  return default_appearance_string;
+}
 
 // Find the token and its |nParams| parameters from the start of data,
 // and move the current position to the start of those parameters.
@@ -58,24 +74,37 @@ CPDF_DefaultAppearance::CPDF_DefaultAppearance(const ByteString& csDA)
     : m_csDA(csDA) {}
 
 CPDF_DefaultAppearance::CPDF_DefaultAppearance(
-    const CPDF_DefaultAppearance& cDA) = default;
+    const CPDF_Dictionary* annot_dict,
+    const CPDF_Dictionary* acroform_dict)
+    : CPDF_DefaultAppearance(
+       GetDefaultAppearanceString(annot_dict, acroform_dict)) {}
 
 CPDF_DefaultAppearance::~CPDF_DefaultAppearance() = default;
 
-std::optional<ByteString> CPDF_DefaultAppearance::GetFont(
-    float* fFontSize) const {
-  *fFontSize = 0.0f;
+std::optional<CPDF_DefaultAppearance::FontNameAndSize>
+CPDF_DefaultAppearance::GetFont() const {
   if (m_csDA.IsEmpty())
-    return std::nullopt;
+     return std::nullopt;
 
-  ByteString csFontNameTag;
   CPDF_SimpleParser syntax(m_csDA.AsStringView().unsigned_span());
-  if (FindTagParamFromStart(&syntax, "Tf", 2)) {
-    csFontNameTag = ByteString(syntax.GetWord());
-    csFontNameTag.Delete(0, 1);
-    *fFontSize = StringToFloat(syntax.GetWord());
+  if (!FindTagParamFromStart(&syntax, "Tf", 2)) {
+    return FontNameAndSize();
   }
-  return PDF_NameDecode(csFontNameTag.AsStringView());
+
+  // Deliberately using separate statements here to ensure the correct
+  // evaluation order.
+  FontNameAndSize result;
+  result.name = PDF_NameDecode(syntax.GetWord().Substr(1));
+  result.size = StringToFloat(syntax.GetWord());
+  return result;
+}
+
+float CPDF_DefaultAppearance::GetFontSizeOrZero() const {
+  auto maybe_font_name_and_size = GetFont();
+  if (!maybe_font_name_and_size.has_value()) {
+    return 0;
+  }
+  return maybe_font_name_and_size.value().size;
 }
 
 std::optional<CFX_Color> CPDF_DefaultAppearance::GetColor() const {
