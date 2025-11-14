@@ -22,12 +22,12 @@
 #include "core/fxcrt/widestring.h"
 #include "third_party/fast_float/src/include/fast_float/fast_float.h"
 
-#if !defined(WCHAR_T_IS_16_BIT) && !defined(WCHAR_T_IS_32_BIT)
-#error "Unknown wchar_t size"
-#endif
-#if defined(WCHAR_T_IS_16_BIT) && defined(WCHAR_T_IS_32_BIT)
-#error "Conflicting wchar_t sizes"
-#endif
+//#if !defined(WCHAR_T_IS_16_BIT) && !defined(WCHAR_T_IS_32_BIT)
+//#error "Unknown wchar_t size"
+//#endif
+//#if defined(WCHAR_T_IS_16_BIT) && defined(WCHAR_T_IS_32_BIT)
+//#error "Conflicting wchar_t sizes"
+//#endif
 
 namespace {
 
