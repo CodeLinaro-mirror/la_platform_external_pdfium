@@ -11,147 +11,115 @@
 #include <math.h>
 #include <time.h>
 #include <wctype.h>
-
 #include "build/build_config.h"
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/span.h"
 #include "core/fxcrt/widestring.h"
-
 #if defined(USE_SYSTEM_ICUUC)
 #include <unicode/uchar.h>
 #else
 #include "third_party/icu/source/common/unicode/uchar.h"
 #endif
-
 #define FX_INVALID_OFFSET static_cast<uint32_t>(-1)
-
 #define FX_IsOdd(a) ((a) & 1)
-
-float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen);
-
+float FXSYS_wcstof(WideStringView pwsStr, size_t *pUsedLen);
 // PRECONDITIONS: `dstStr` and `srcStr` must point to `count` valid wchars.
-UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
-                                           const wchar_t* srcStr,
+UNSAFE_BUFFER_USAGE wchar_t *FXSYS_wcsncpy(wchar_t *dstStr,
+                                           const wchar_t *srcStr,
                                            size_t count);
-
 inline bool FXSYS_iswlower(int32_t c) {
-  return u_islower(c);
+    if (__builtin_available(android 31, *)) return u_islower(c);
+    else return iswlower(c);
 }
-
 inline bool FXSYS_iswupper(int32_t c) {
-  return u_isupper(c);
+    if (__builtin_available(android 31, *)) return u_isupper(c);
+    else return iswupper(c);
 }
-
 inline int32_t FXSYS_towlower(wchar_t c) {
-  return u_tolower(c);
+    if (__builtin_available(android 31, *)) return u_tolower(c);
+    else return towlower(c);
 }
-
 inline int32_t FXSYS_towupper(wchar_t c) {
-  return u_toupper(c);
+    if (__builtin_available(android 31, *)) return u_toupper(c);
+    else return towupper(c);
 }
-
 inline bool FXSYS_IsLowerASCII(int32_t c) {
-  return c >= 'a' && c <= 'z';
+    return c >= 'a' && c <= 'z';
 }
-
 inline bool FXSYS_IsUpperASCII(int32_t c) {
-  return c >= 'A' && c <= 'Z';
+    return c >= 'A' && c <= 'Z';
 }
-
 inline char FXSYS_ToUpperASCII(char c) {
-  return FXSYS_IsLowerASCII(c) ? (c + ('A' - 'a')) : c;
+    return FXSYS_IsLowerASCII(c) ? (c + ('A' - 'a')) : c;
 }
-
 inline bool FXSYS_iswalpha(wchar_t c) {
-  return u_isalpha(c);
+    if (__builtin_available(android 31, *)) return u_isalpha(c);
+    else return iswalpha(c);
 }
-
 inline bool FXSYS_iswalnum(wchar_t c) {
-  return u_isalnum(c);
+    if (__builtin_available(android 31, *)) return u_isalnum(c);
+    else return iswalnum(c);
 }
-
 inline bool FXSYS_iswspace(wchar_t c) {
-  return u_isspace(c);
+    if (__builtin_available(android 31, *)) return u_isspace(c);
+    else return iswspace(c);
 }
-
 inline bool FXSYS_IsOctalDigit(char c) {
-  return c >= '0' && c <= '7';
+    return c >= '0' && c <= '7';
 }
-
 inline bool FXSYS_IsHexDigit(char c) {
-  return !((c & 0x80) || !isxdigit(c));
+    return !((c & 0x80) || !isxdigit(c));
 }
-
 inline bool FXSYS_IsWideHexDigit(wchar_t c) {
-  return !((c & 0xFFFFFF80) || !isxdigit(c));
+    return !((c & 0xFFFFFF80) || !isxdigit(c));
 }
-
 inline int FXSYS_HexCharToInt(char c) {
-  if (!FXSYS_IsHexDigit(c)) {
-    return 0;
-  }
-  char upchar = FXSYS_ToUpperASCII(c);
-  return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
+    if (!FXSYS_IsHexDigit(c))
+        return 0;
+    char upchar = FXSYS_ToUpperASCII(c);
+    return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
 }
-
 inline int FXSYS_WideHexCharToInt(wchar_t c) {
-  if (!FXSYS_IsWideHexDigit(c)) {
-    return 0;
-  }
-  char upchar = toupper(static_cast<char>(c));
-  return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
+    if (!FXSYS_IsWideHexDigit(c))
+        return 0;
+    char upchar = toupper(static_cast<char>(c));
+    return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
 }
-
 inline bool FXSYS_IsDecimalDigit(char c) {
-  return !((c & 0x80) || !isdigit(c));
+    return !((c & 0x80) || !isdigit(c));
 }
-
 inline bool FXSYS_IsDecimalDigit(wchar_t c) {
-  return !((c & 0xFFFFFF80) || !iswdigit(c));
+    return !((c & 0xFFFFFF80) || !iswdigit(c));
 }
-
 inline int FXSYS_DecimalCharToInt(char c) {
-  return FXSYS_IsDecimalDigit(c) ? c - '0' : 0;
+    return FXSYS_IsDecimalDigit(c) ? c - '0' : 0;
 }
-
 inline int FXSYS_DecimalCharToInt(wchar_t c) {
-  return FXSYS_IsDecimalDigit(c) ? c - L'0' : 0;
+    return FXSYS_IsDecimalDigit(c) ? c - L'0' : 0;
 }
-
-void FXSYS_IntToTwoHexChars(uint8_t n, pdfium::span<char, 2u> buf);
-void FXSYS_IntToFourHexChars(uint16_t n, pdfium::span<char, 4u> buf);
-
-// Converts `unicode` to a UTF16-BE hex string. Writes the string into `buf` and
-// returns the portion of `buf` used to store the string. The returned span is
-// never empty.
-pdfium::span<const char> FXSYS_ToUTF16BE(uint32_t unicode,
-                                         pdfium::span<char, 8u> buf);
-
+void FXSYS_IntToTwoHexChars(uint8_t n, char *buf);
+void FXSYS_IntToFourHexChars(uint16_t n, char *buf);
+size_t FXSYS_ToUTF16BE(uint32_t unicode, char *buf);
 // Strict order over floating types where NaNs may be present.
 // All NaNs are treated as equal to each other and greater than infinity.
-template <typename T>
-bool FXSYS_SafeEQ(const T& lhs, const T& rhs) {
-  return (isnan(lhs) && isnan(rhs)) ||
-         (!isnan(lhs) && !isnan(rhs) && lhs == rhs);
+template<typename T>
+bool FXSYS_SafeEQ(const T &lhs, const T &rhs) {
+    return (isnan(lhs) && isnan(rhs)) ||
+           (!isnan(lhs) && !isnan(rhs) && lhs == rhs);
 }
-
-template <typename T>
-bool FXSYS_SafeLT(const T& lhs, const T& rhs) {
-  if (isnan(lhs) && isnan(rhs)) {
-    return false;
-  }
-  if (isnan(lhs) || isnan(rhs)) {
-    return isnan(lhs) < isnan(rhs);
-  }
-  return lhs < rhs;
+template<typename T>
+bool FXSYS_SafeLT(const T &lhs, const T &rhs) {
+    if (isnan(lhs) && isnan(rhs))
+        return false;
+    if (isnan(lhs) || isnan(rhs))
+        return isnan(lhs) < isnan(rhs);
+    return lhs < rhs;
 }
-
 // Override time/localtime functions for test consistency.
 void FXSYS_SetTimeFunction(time_t (*func)());
-void FXSYS_SetLocaltimeFunction(struct tm* (*func)(const time_t*));
-
+void FXSYS_SetLocaltimeFunction(struct tm *(*func)(const time_t *));
 // Replacements for time/localtime that respect overrides.
-time_t FXSYS_time(time_t* tloc);
-struct tm* FXSYS_localtime(const time_t* tp);
-
+time_t FXSYS_time(time_t *tloc);
+struct tm *FXSYS_localtime(const time_t *tp);
 #endif  // CORE_FXCRT_FX_EXTENSION_H_
+
