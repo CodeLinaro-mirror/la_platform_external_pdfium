@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <vector>
 
 #include "core/fxcrt/raw_span.h"
@@ -171,7 +172,7 @@ void CreateDanglingSpan() {
   pdfium::raw_span<int> data_span;
   {
     std::vector<int> data(4);
-    data_span = pdfium::make_span(data);
+    data_span = pdfium::span(data);
   }
 }
 

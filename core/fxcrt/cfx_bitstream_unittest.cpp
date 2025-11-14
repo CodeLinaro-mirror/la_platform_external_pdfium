@@ -164,12 +164,13 @@ TEST(fxcrt, BitStreamBig) {
   // the bitstream arithmetic, but as long as we don't try to extract
   // any bits, the calculations should be unaffected.
   const uint8_t kNotReallyBigEnough[32] = {};
-  constexpr size_t kAllocationBytes = std::numeric_limits<size_t>::max() / 8;
-  constexpr size_t kAllocationBits = kAllocationBytes * 8;
+  static constexpr size_t kAllocationBytes =
+      std::numeric_limits<size_t>::max() / 8;
+  static constexpr size_t kAllocationBits = kAllocationBytes * 8;
 
   // SAFETY: intentionally not safe, see above.
   CFX_BitStream bitstream(
-      UNSAFE_BUFFERS(pdfium::make_span(kNotReallyBigEnough, kAllocationBytes)));
+      UNSAFE_BUFFERS(pdfium::span(kNotReallyBigEnough, kAllocationBytes)));
   EXPECT_FALSE(bitstream.IsEOF());
   EXPECT_EQ(0U, bitstream.GetPos());
   EXPECT_EQ(kAllocationBits, bitstream.BitsRemaining());

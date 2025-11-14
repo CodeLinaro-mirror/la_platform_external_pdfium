@@ -46,8 +46,9 @@ class TestHolder final : public CPDF_IndirectObjectHolder {
   // CPDF_IndirectObjectHolder overrides:
   RetainPtr<CPDF_Object> ParseIndirectObject(uint32_t objnum) override {
     auto it = objects_data_.find(objnum);
-    if (it == objects_data_.end())
+    if (it == objects_data_.end()) {
       return nullptr;
+    }
 
     ObjectData& obj_data = it->second;
     if (obj_data.state == ObjectState::Unavailable) {
@@ -78,8 +79,9 @@ class TestHolder final : public CPDF_IndirectObjectHolder {
 
   CPDF_Object* GetTestObject(uint32_t objnum) {
     auto it = objects_data_.find(objnum);
-    if (it == objects_data_.end())
+    if (it == objects_data_.end()) {
       return nullptr;
+    }
     return it->second.object.Get();
   }
 
@@ -96,9 +98,7 @@ class CPDF_ObjectAvailFailOnExclude final : public CPDF_ObjectAvail {
  public:
   using CPDF_ObjectAvail::CPDF_ObjectAvail;
   ~CPDF_ObjectAvailFailOnExclude() override = default;
-  bool ExcludeObject(const CPDF_Object* object) const override {
-    NOTREACHED_NORETURN();
-  }
+  bool ExcludeObject(const CPDF_Object* object) const override { NOTREACHED(); }
 };
 
 class CPDF_ObjectAvailExcludeArray final : public CPDF_ObjectAvail {

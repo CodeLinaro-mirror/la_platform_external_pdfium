@@ -19,6 +19,7 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
 #include "core/fxcrt/check.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_stream.h"
 
@@ -79,11 +80,14 @@ std::optional<FX_FILESIZE> GetHeaderOffset(
   static constexpr size_t kBufSize = 4;
   uint8_t buf[kBufSize];
   for (FX_FILESIZE offset = 0; offset <= 1024; ++offset) {
-    if (!pFile->ReadBlockAtOffset(buf, offset))
+    if (!pFile->ReadBlockAtOffset(buf, offset)) {
       return std::nullopt;
+    }
 
-    if (memcmp(buf, "%PDF", 4) == 0)
+    // SAFETY: string literal and `buf` can accommodate 4 byte comparisons.
+    if (UNSAFE_BUFFERS(memcmp(buf, "%PDF", 4)) == 0) {
       return offset;
+    }
   }
   return std::nullopt;
 }
@@ -132,7 +136,7 @@ ByteString PDF_NameEncode(const ByteString& orig) {
       if (ch >= 0x80 || PDFCharIsWhitespace(ch) || ch == '#' ||
           PDFCharIsDelimiter(ch)) {
         dest_buf[dest_len++] = '#';
-        FXSYS_IntToTwoHexChars(ch, &dest_buf[dest_len]);
+        FXSYS_IntToTwoHexChars(ch, dest_buf.subspan(dest_len).first<2u>());
         dest_len += 2;
         continue;
       }
@@ -148,8 +152,9 @@ std::vector<float> ReadArrayElementsToVector(const CPDF_Array* pArray,
   DCHECK(pArray);
   DCHECK(pArray->size() >= nCount);
   std::vector<float> ret(nCount);
-  for (size_t i = 0; i < nCount; ++i)
+  for (size_t i = 0; i < nCount; ++i) {
     ret[i] = pArray->GetFloatAt(i);
+  }
   return ret;
 }
 
@@ -160,15 +165,17 @@ bool ValidateDictType(const CPDF_Dictionary* dict, ByteStringView type) {
 
 bool ValidateDictAllResourcesOfType(const CPDF_Dictionary* dict,
                                     ByteStringView type) {
-  if (!dict)
+  if (!dict) {
     return false;
+  }
 
   CPDF_DictionaryLocker locker(dict);
   for (const auto& it : locker) {
     RetainPtr<const CPDF_Dictionary> entry =
         ToDictionary(it.second->GetDirect());
-    if (!ValidateDictType(entry.Get(), type))
+    if (!ValidateDictType(entry.Get(), type)) {
       return false;
+    }
   }
   return true;
 }

@@ -14,6 +14,7 @@
 
 #include "build/build_config.h"
 #include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/widestring.h"
 
 #if defined(USE_SYSTEM_ICUUC)
@@ -24,48 +25,29 @@
 
 #define FX_INVALID_OFFSET static_cast<uint32_t>(-1)
 
-#define FX_IsOdd(a) ((a)&1)
+#define FX_IsOdd(a) ((a) & 1)
 
 float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen);
 
+// PRECONDITIONS: `dstStr` and `srcStr` must point to `count` valid wchars.
 UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
                                            const wchar_t* srcStr,
                                            size_t count);
 
 inline bool FXSYS_iswlower(int32_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_islower(c);
-    else return iswlower(c);
-#else
-    return iswlower(c);
-#endif
+  return u_islower(c);
 }
 
 inline bool FXSYS_iswupper(int32_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_isupper(c);
-    else return iswupper(c);
-#else
-    return iswupper(c);
-#endif
+  return u_isupper(c);
 }
 
 inline int32_t FXSYS_towlower(wchar_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_tolower(c);
-    else return towlower(c);
-#else
-    return towlower(c);
-#endif
+  return u_tolower(c);
 }
 
 inline int32_t FXSYS_towupper(wchar_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_toupper(c);
-    else return towupper(c);
-#else
-    return towupper(c);
-#endif
+  return u_toupper(c);
 }
 
 inline bool FXSYS_IsLowerASCII(int32_t c) {
@@ -81,30 +63,15 @@ inline char FXSYS_ToUpperASCII(char c) {
 }
 
 inline bool FXSYS_iswalpha(wchar_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_isalpha(c);
-    else return iswalpha(c);
-#else
-    return iswalpha(c);
-#endif
+  return u_isalpha(c);
 }
 
 inline bool FXSYS_iswalnum(wchar_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_isalnum(c);
-    else return iswalnum(c);
-#else
-    return iswalnum(c);
-#endif
+  return u_isalnum(c);
 }
 
 inline bool FXSYS_iswspace(wchar_t c) {
-#ifndef ANDROID_R_COMPATIBLE
-    if (__builtin_available(android 31, *)) return u_isspace(c);
-    else return iswspace(c);
-#else
-    return iswspace(c);
-#endif
+  return u_isspace(c);
 }
 
 inline bool FXSYS_IsOctalDigit(char c) {
@@ -120,15 +87,17 @@ inline bool FXSYS_IsWideHexDigit(wchar_t c) {
 }
 
 inline int FXSYS_HexCharToInt(char c) {
-  if (!FXSYS_IsHexDigit(c))
+  if (!FXSYS_IsHexDigit(c)) {
     return 0;
+  }
   char upchar = FXSYS_ToUpperASCII(c);
   return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
 }
 
 inline int FXSYS_WideHexCharToInt(wchar_t c) {
-  if (!FXSYS_IsWideHexDigit(c))
+  if (!FXSYS_IsWideHexDigit(c)) {
     return 0;
+  }
   char upchar = toupper(static_cast<char>(c));
   return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
 }
@@ -149,10 +118,14 @@ inline int FXSYS_DecimalCharToInt(wchar_t c) {
   return FXSYS_IsDecimalDigit(c) ? c - L'0' : 0;
 }
 
-void FXSYS_IntToTwoHexChars(uint8_t n, char* buf);
-void FXSYS_IntToFourHexChars(uint16_t n, char* buf);
+void FXSYS_IntToTwoHexChars(uint8_t n, pdfium::span<char, 2u> buf);
+void FXSYS_IntToFourHexChars(uint16_t n, pdfium::span<char, 4u> buf);
 
-size_t FXSYS_ToUTF16BE(uint32_t unicode, char* buf);
+// Converts `unicode` to a UTF16-BE hex string. Writes the string into `buf` and
+// returns the portion of `buf` used to store the string. The returned span is
+// never empty.
+pdfium::span<const char> FXSYS_ToUTF16BE(uint32_t unicode,
+                                         pdfium::span<char, 8u> buf);
 
 // Strict order over floating types where NaNs may be present.
 // All NaNs are treated as equal to each other and greater than infinity.
@@ -164,10 +137,12 @@ bool FXSYS_SafeEQ(const T& lhs, const T& rhs) {
 
 template <typename T>
 bool FXSYS_SafeLT(const T& lhs, const T& rhs) {
-  if (isnan(lhs) && isnan(rhs))
+  if (isnan(lhs) && isnan(rhs)) {
     return false;
-  if (isnan(lhs) || isnan(rhs))
+  }
+  if (isnan(lhs) || isnan(rhs)) {
     return isnan(lhs) < isnan(rhs);
+  }
   return lhs < rhs;
 }
 

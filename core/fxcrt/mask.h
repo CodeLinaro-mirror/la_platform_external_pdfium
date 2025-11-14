@@ -92,9 +92,7 @@ class Mask {
     val_ ^= that.val_;
     return *this;
   }
-  bool operator==(const Mask& that) const { return val_ == that.val_; }
-  bool operator!=(const Mask& that) const { return val_ != that.val_; }
-
+  friend constexpr bool operator==(const Mask&, const Mask&) = default;
   bool TestAll(const Mask& that) const {
     return (val_ & that.val_) == that.val_;
   }
