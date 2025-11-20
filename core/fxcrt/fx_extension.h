@@ -22,26 +22,45 @@
 #endif
 #define FX_INVALID_OFFSET static_cast<uint32_t>(-1)
 #define FX_IsOdd(a) ((a) & 1)
-float FXSYS_wcstof(WideStringView pwsStr, size_t *pUsedLen);
+float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen);
 // PRECONDITIONS: `dstStr` and `srcStr` must point to `count` valid wchars.
-UNSAFE_BUFFER_USAGE wchar_t *FXSYS_wcsncpy(wchar_t *dstStr,
-                                           const wchar_t *srcStr,
+UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
+                                           const wchar_t* srcStr,
                                            size_t count);
 inline bool FXSYS_iswlower(int32_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_islower(c);
     else return iswlower(c);
+#else
+    return iswlower(c);
+#endif
 }
+
 inline bool FXSYS_iswupper(int32_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isupper(c);
     else return iswupper(c);
+#else
+    return iswupper(c);
+#endif
 }
+
 inline int32_t FXSYS_towlower(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_tolower(c);
     else return towlower(c);
+#else
+    return towlower(c);
+#endif
 }
+
 inline int32_t FXSYS_towupper(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_toupper(c);
     else return towupper(c);
+#else
+    return towupper(c);
+#endif
 }
 inline bool FXSYS_IsLowerASCII(int32_t c) {
     return c >= 'a' && c <= 'z';
@@ -53,16 +72,28 @@ inline char FXSYS_ToUpperASCII(char c) {
     return FXSYS_IsLowerASCII(c) ? (c + ('A' - 'a')) : c;
 }
 inline bool FXSYS_iswalpha(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isalpha(c);
     else return iswalpha(c);
+#else
+    return iswalpha(c);
+#endif
 }
 inline bool FXSYS_iswalnum(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isalnum(c);
     else return iswalnum(c);
+#else
+    return iswalnum(c);
+#endif
 }
 inline bool FXSYS_iswspace(wchar_t c) {
+#ifndef ANDROID_R_COMPATIBLE
     if (__builtin_available(android 31, *)) return u_isspace(c);
     else return iswspace(c);
+#else
+    return iswspace(c);
+#endif
 }
 inline bool FXSYS_IsOctalDigit(char c) {
     return c >= '0' && c <= '7';
@@ -97,9 +128,14 @@ inline int FXSYS_DecimalCharToInt(char c) {
 inline int FXSYS_DecimalCharToInt(wchar_t c) {
     return FXSYS_IsDecimalDigit(c) ? c - L'0' : 0;
 }
-void FXSYS_IntToTwoHexChars(uint8_t n, char *buf);
-void FXSYS_IntToFourHexChars(uint16_t n, char *buf);
-size_t FXSYS_ToUTF16BE(uint32_t unicode, char *buf);
+void FXSYS_IntToTwoHexChars(uint8_t n, pdfium::span<char, 2u> buf);
+void FXSYS_IntToFourHexChars(uint16_t n, pdfium::span<char, 4u> buf);
+
+// Converts `unicode` to a UTF16-BE hex string. Writes the string into `buf` and
+// returns the portion of `buf` used to store the string. The returned span is
+// never empty.
+pdfium::span<const char> FXSYS_ToUTF16BE(uint32_t unicode,
+                                         pdfium::span<char, 8u> buf);
 // Strict order over floating types where NaNs may be present.
 // All NaNs are treated as equal to each other and greater than infinity.
 template<typename T>

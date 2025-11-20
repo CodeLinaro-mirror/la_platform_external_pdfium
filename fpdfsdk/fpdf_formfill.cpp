@@ -770,6 +770,61 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDraw(FPDF_FORMHANDLE hHandle,
             flags);
 }
 
+FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawWithMatrix(FPDF_FORMHANDLE hHandle,
+                                                      FPDF_BITMAP bitmap,
+                                                      FPDF_PAGE page,
+                                                      const FS_MATRIX* matrix,
+                                                      const FS_RECTF* clipping,
+                                                      int flags) {
+    if (!hHandle)
+        return;
+
+    IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
+    if (!pPage)
+        return;
+
+    CPDF_Document* pPDFDoc = pPage->GetDocument();
+    CPDFSDK_PageView* pPageView = FormHandleToPageView(hHandle, page);
+
+    CFX_FloatRect clipping_rect;
+    if (clipping)
+        clipping_rect = CFXFloatRectFromFSRectF(*clipping);
+    FX_RECT clip_rect = clipping_rect.ToFxRect();
+
+    const FX_RECT rect(0, 0, pPage->GetPageWidth(), pPage->GetPageHeight());
+    CFX_Matrix transform_matrix = pPage->GetDisplayMatrixForRect(rect, 0);
+    if (matrix)
+        transform_matrix *= CFXMatrixFromFSMatrix(*matrix);
+
+    auto pDevice = std::make_unique<CFX_DefaultRenderDevice>();
+#if defined(_SKIA_SUPPORT_)
+    if (CFX_DefaultRenderDevice::SkiaIsDefaultRenderer() && canvas) {
+      pDevice->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
+  }
+#endif
+
+    RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
+    pDevice->AttachWithRgbByteOrder(holder, !!(flags & FPDF_REVERSE_BYTE_ORDER));
+    {
+        CFX_RenderDevice::StateRestorer restorer(pDevice.get());
+        pDevice->SetClip_Rect(clip_rect);
+
+        CPDF_RenderOptions options;
+        options.GetOptions().bClearType = !!(flags & FPDF_LCD_TEXT);
+
+// Grayscale output
+        if (flags & FPDF_GRAYSCALE)
+            options.SetColorMode(CPDF_RenderOptions::kGray);
+
+        options.SetDrawAnnots(flags & FPDF_ANNOT);
+        options.SetOCContext(
+                pdfium::MakeRetain<CPDF_OCContext>(pPDFDoc, CPDF_OCContext::kView));
+
+        if (pPageView)
+            pPageView->PageView_OnDraw(pDevice.get(), transform_matrix, &options, clip_rect);
+    }
+}
+
 #if defined(PDF_USE_SKIA)
 FPDF_EXPORT void FPDF_CALLCONV FPDF_FFLDrawSkia(FPDF_FORMHANDLE hHandle,
                                                 FPDF_SKIA_CANVAS canvas,
