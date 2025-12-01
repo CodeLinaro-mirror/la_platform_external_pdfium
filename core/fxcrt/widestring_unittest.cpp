@@ -33,18 +33,17 @@ TEST(WideString, ElementAccess) {
   EXPECT_EQ(L'a', abc[0]);
   EXPECT_EQ(L'b', abc[1]);
   EXPECT_EQ(L'c', abc[2]);
-#ifndef NDEBUG
-  EXPECT_DEATH({ abc[4]; }, "");
-#endif
+  EXPECT_DEATH_IF_SUPPORTED({ abc[4]; }, "");
 
   pdfium::span<const wchar_t> abc_span = abc.span();
   EXPECT_EQ(3u, abc_span.size());
-  EXPECT_EQ(0, wmemcmp(abc_span.data(), L"abc", 3));
+  EXPECT_EQ(0, UNSAFE_TODO(wmemcmp(abc_span.data(), L"abc", 3)));
 
   pdfium::span<const wchar_t> abc_span_with_terminator =
       abc.span_with_terminator();
   EXPECT_EQ(4u, abc_span_with_terminator.size());
-  EXPECT_EQ(0, wmemcmp(abc_span_with_terminator.data(), L"abc", 4));
+  EXPECT_EQ(0,
+            UNSAFE_TODO(wmemcmp(abc_span_with_terminator.data(), L"abc", 4)));
 
   WideString mutable_abc = abc;
   EXPECT_EQ(abc.c_str(), mutable_abc.c_str());
@@ -68,10 +67,7 @@ TEST(WideString, ElementAccess) {
   mutable_abc.SetAt(2, L'f');
   EXPECT_EQ(L"abc", abc);
   EXPECT_EQ(L"def", mutable_abc);
-#ifndef NDEBUG
-  EXPECT_DEATH({ mutable_abc.SetAt(3, L'g'); }, "");
-  EXPECT_EQ(L"abc", abc);
-#endif
+  EXPECT_DEATH_IF_SUPPORTED({ mutable_abc.SetAt(3, L'g'); }, "");
 }
 
 TEST(WideString, Construct) {
@@ -1015,7 +1011,8 @@ TEST(WideString, GetBuffer) {
   WideString str1;
   {
     pdfium::span<wchar_t> buffer = str1.GetBuffer(12);
-    wcscpy(buffer.data(), L"clams");
+    // SAFETY: required for test.
+    UNSAFE_BUFFERS(wcscpy(buffer.data(), L"clams"));
   }
   str1.ReleaseBuffer(str1.GetStringLength());
   EXPECT_EQ(L"clams", str1);
@@ -1474,6 +1471,16 @@ TEST(WideString, FromDefANSI) {
                                              "y"));
 }
 
+TEST(WideStringView, ConstexprCtors) {
+  static constexpr WideStringView null_string;
+  static_assert(null_string.GetLength() == 0);
+  static_assert(null_string.IsEmpty());
+
+  static constexpr WideStringView copied_null_string(null_string);
+  static_assert(copied_null_string.GetLength() == 0);
+  static_assert(copied_null_string.IsEmpty());
+}
+
 TEST(WideStringView, FromVector) {
   std::vector<WideStringView::UnsignedType> null_vec;
   WideStringView null_string(null_vec);
@@ -1498,9 +1505,7 @@ TEST(WideStringView, ElementAccess) {
   EXPECT_EQ(L'a', static_cast<wchar_t>(abc[0]));
   EXPECT_EQ(L'b', static_cast<wchar_t>(abc[1]));
   EXPECT_EQ(L'c', static_cast<wchar_t>(abc[2]));
-#ifndef NDEBUG
-  EXPECT_DEATH({ abc[4]; }, "");
-#endif
+  EXPECT_DEATH_IF_SUPPORTED({ abc[4]; }, "");
 }
 
 TEST(WideStringView, OperatorLT) {
@@ -1885,7 +1890,7 @@ TEST(WideString, Empty) {
 
   const wchar_t* cstr = empty_str.c_str();
   EXPECT_TRUE(cstr);
-  EXPECT_EQ(0u, wcslen(cstr));
+  EXPECT_EQ(0u, UNSAFE_TODO(wcslen(cstr)));
 
   pdfium::span<const wchar_t> cspan = empty_str.span();
   EXPECT_TRUE(cspan.empty());

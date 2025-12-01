@@ -41,13 +41,7 @@
 
 #if defined(COMPILER_GCC)
 
-#if BUILDFLAG(IS_NACL)
-
-// Crash report accuracy is not guaranteed on NaCl.
-#define TRAP_SEQUENCE1_() __builtin_trap()
-#define TRAP_SEQUENCE2_() asm volatile("")
-
-#elif defined(ARCH_CPU_X86_FAMILY)
+#if defined(ARCH_CPU_X86_FAMILY)
 
 // TODO(https://crbug.com/958675): In theory, it should be possible to use just
 // int3. However, there are a number of crashes with SIGILL as the exception
@@ -91,13 +85,7 @@
 
 #elif defined(COMPILER_MSVC)
 
-#if !defined(__clang__)
-
-// MSVC x64 doesn't support inline asm, so use the MSVC intrinsic.
-#define TRAP_SEQUENCE1_() __debugbreak()
-#define TRAP_SEQUENCE2_()
-
-#elif defined(ARCH_CPU_ARM64)
+#if defined(ARCH_CPU_ARM64)
 
 // Windows ARM64 uses "BRK #F000" as its breakpoint instruction, and
 // __debugbreak() generates that in both VC++ and clang.
@@ -112,7 +100,7 @@
 #define TRAP_SEQUENCE1_() asm volatile("int3")
 #define TRAP_SEQUENCE2_() asm volatile("ud2")
 
-#endif  // __clang__
+#endif  // defined(ARCH_CPU_ARM64)
 
 #else
 
