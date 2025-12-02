@@ -301,7 +301,7 @@ bool ValidateOrCreateFontResources(CPDF_Document* doc,
     return false;
   }
 
-  if (!font_resource_dict->KeyExist(font_name)) {
+  if (!font_resource_dict->KeyExist(font_name.AsStringView())) {
     font_resource_dict->SetNewFor<CPDF_Reference>(font_name, doc,
                                                   font_dict->GetObjNum());
   }
@@ -626,7 +626,7 @@ RetainPtr<CPDF_Dictionary> GetFontFromDrFontDictOrGenerateFallback(
     CPDF_Dictionary* dr_font_dict,
     const ByteString& font_name) {
   RetainPtr<CPDF_Dictionary> font_dict =
-      dr_font_dict->GetMutableDictFor(font_name);
+      dr_font_dict->GetMutableDictFor(font_name.AsStringView());
   if (font_dict) {
     return font_dict;
   }
@@ -1380,10 +1380,11 @@ bool GenerateSquigglyAP(CPDF_Document* doc, CPDF_Dictionary* annot_dict) {
       }
 
       float remainder = rect.right - (x - kDelta);
-      if (isUpwards)
+      if (isUpwards) {
         app_stream << rect.right << " " << bottom + remainder << " l ";
-      else
+      } else {
         app_stream << rect.right << " " << top - remainder << " l ";
+      }
 
       app_stream << "S\n";
     }
@@ -1612,9 +1613,6 @@ bool CPDF_GenerateAP::GenerateDefaultAppearanceWithColor(
     CPDF_Document* doc,
     CPDF_Dictionary* annot_dict,
     const CFX_Color& color) {
-  CHECK(doc);
-  CHECK(annot_dict);
-
   RetainPtr<CPDF_Dictionary> root_dict = doc->GetMutableRoot();
   if (!root_dict) {
     return false;

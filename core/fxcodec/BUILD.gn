@@ -58,7 +58,7 @@ source_set("fxcodec") {
     "jbig2/JBig2_TrdProc.h",
     "jbig2/jbig2_decoder.cpp",
     "jbig2/jbig2_decoder.h",
-    "jpeg/jpeg_common.cpp",
+    "jpeg/jpeg_common.c",
     "jpeg/jpeg_common.h",
     "jpeg/jpegmodule.cpp",
     "jpeg/jpegmodule.h",
@@ -122,6 +122,8 @@ source_set("fxcodec") {
       sources += [
         "png/png_decoder.cpp",
         "png/png_decoder.h",
+        "png/png_decoder_delegate.cpp",
+        "png/png_decoder_delegate.h",
       ]
       deps += [ "../../third_party:png" ]
     }
