@@ -289,7 +289,7 @@ FPDFAnnot_RemoveObject(FPDF_ANNOTATION annot, int index);
 // Experimental API.
 // Set the color of an annotation. Fails when called on annotations with
 // appearance streams already defined; instead use
-// FPDFPath_Set{Stroke|Fill}Color().
+// FPDFPageObj_Set{Stroke|Fill}Color().
 //
 //   annot    - handle to an annotation.
 //   type     - type of the color to be set.
@@ -308,7 +308,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetColor(FPDF_ANNOTATION annot,
 // Get the color of an annotation. If no color is specified, default to yellow
 // for highlight annotation, black for all else. Fails when called on
 // annotations with appearance streams already defined; instead use
-// FPDFPath_Get{Stroke|Fill}Color().
+// FPDFPageObj_Get{Stroke|Fill}Color().
 //
 //   annot    - handle to an annotation.
 //   type     - type of the color requested.
@@ -684,6 +684,20 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFAnnot_SetFlags(FPDF_ANNOTATION annot,
 FPDF_EXPORT int FPDF_CALLCONV
 FPDFAnnot_GetFormFieldFlags(FPDF_FORMHANDLE handle,
                             FPDF_ANNOTATION annot);
+
+// Experimental API.
+// Sets the form field flags for an interactive form annotation.
+//
+//   handle       -   the handle to the form fill module, returned by
+//                    FPDFDOC_InitFormFillEnvironment().
+//   annot        -   handle to an interactive form annotation.
+//   flags        -   the form field flags to be set.
+//
+// Returns true if successful.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFAnnot_SetFormFieldFlags(FPDF_FORMHANDLE handle,
+                            FPDF_ANNOTATION annot,
+                            int flags);
 
 // Experimental API.
 // Retrieves an interactive form annotation whose rectangle contains a given

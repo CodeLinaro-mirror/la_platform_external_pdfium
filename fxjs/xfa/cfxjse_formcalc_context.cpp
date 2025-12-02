@@ -6,7 +6,6 @@
 
 #include "fxjs/xfa/cfxjse_formcalc_context.h"
 
-#include <ctype.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -28,6 +27,7 @@
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_random.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/widetext_buffer.h"
@@ -69,12 +69,12 @@ constexpr std::array<wchar_t, 16> kStrCode = {
      L'c', L'd', L'e', L'f'}};
 
 struct XFA_FMHtmlReserveCode {
-  uint16_t m_uCode;
+  uint16_t code_;
   // Inline string data reduces size for small strings.
-  const char m_htmlReserve[10];
+  const char html_reserve_[10];
 };
 
-// Sorted by |m_htmlReserve|.
+// Sorted by |html_reserve_|.
 const XFA_FMHtmlReserveCode kReservesForDecode[] = {
     {198, "AElig"},   {193, "Aacute"},   {194, "Acirc"},    {192, "Agrave"},
     {913, "Alpha"},   {197, "Aring"},    {195, "Atilde"},   {196, "Auml"},
@@ -141,7 +141,7 @@ const XFA_FMHtmlReserveCode kReservesForDecode[] = {
     {255, "yuml"},    {950, "zeta"},     {8205, "zwj"},     {8204, "zwnj"},
 };
 
-// Sorted by |m_uCode|.
+// Sorted by |code_|.
 const XFA_FMHtmlReserveCode kReservesForEncode[] = {
     {34, "quot"},     {38, "amp"},      {39, "apos"},      {60, "lt"},
     {62, "gt"},       {160, "nbsp"},    {161, "iexcl"},    {162, "cent"},
@@ -452,19 +452,21 @@ CFXJSE_FormCalcContext* ToFormCalcContext(CFXJSE_HostObject* pHostObj) {
   return pHostObj ? pHostObj->AsFormCalcContext() : nullptr;
 }
 
-GCedLocaleIface* LocaleFromString(CXFA_Document* pDoc,
+GCedLocaleIface* LocaleFromString(CXFA_Document* doc,
                                   CXFA_LocaleMgr* pMgr,
                                   ByteStringView bsLocale) {
-  if (!bsLocale.IsEmpty())
+  if (!bsLocale.IsEmpty()) {
     return pMgr->GetLocaleByName(WideString::FromUTF8(bsLocale));
+  }
 
-  CXFA_Node* pThisNode = ToNode(pDoc->GetScriptContext()->GetThisObject());
+  CXFA_Node* pThisNode = ToNode(doc->GetScriptContext()->GetThisObject());
   return pThisNode->GetLocale();
 }
 
 WideString FormatFromString(LocaleIface* pLocale, ByteStringView bsFormat) {
-  if (!bsFormat.IsEmpty())
+  if (!bsFormat.IsEmpty()) {
     return WideString::FromUTF8(bsFormat);
+  }
 
   return pLocale->GetDatePattern(LocaleIface::DateTimeSubcategory::kDefault);
 }
@@ -484,21 +486,23 @@ LocaleIface::DateTimeSubcategory SubCategoryFromInt(int32_t iStyle) {
   }
 }
 
-ByteString GetLocalDateTimeFormat(CXFA_Document* pDoc,
+ByteString GetLocalDateTimeFormat(CXFA_Document* doc,
                                   int32_t iStyle,
                                   ByteStringView bsLocale,
                                   bool bStandard,
                                   bool bIsDate) {
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
-  LocaleIface* pLocale = LocaleFromString(pDoc, pMgr, bsLocale);
-  if (!pLocale)
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
+  LocaleIface* pLocale = LocaleFromString(doc, pMgr, bsLocale);
+  if (!pLocale) {
     return ByteString();
+  }
 
   LocaleIface::DateTimeSubcategory category = SubCategoryFromInt(iStyle);
   WideString wsLocal = bIsDate ? pLocale->GetDatePattern(category)
                                : pLocale->GetTimePattern(category);
-  if (!bStandard)
+  if (!bStandard) {
     AlternateDateTimeSymbols(&wsLocal, pLocale->GetDateTimeSymbols(), bIsDate);
+  }
   return wsLocal.ToUTF8();
 }
 
@@ -508,7 +512,7 @@ bool IsWhitespace(char c) {
 }
 
 bool IsPartOfNumber(char ch) {
-  return isdigit(ch) || ch == '-' || ch == '.';
+  return FXSYS_IsDecimalDigit(ch) || ch == '-' || ch == '.';
 }
 
 bool IsPartOfNumberW(wchar_t ch) {
@@ -517,19 +521,20 @@ bool IsPartOfNumberW(wchar_t ch) {
 
 ByteString GUIDString(bool bSeparator) {
   std::array<uint8_t, 16> data;
-  FX_Random_GenerateMT(fxcrt::reinterpret_span<uint32_t, uint8_t>(data));
+  FX_Random_GenerateMT(
+      fxcrt::reinterpret_span<uint32_t, uint8_t>(pdfium::span(data)));
   data[6] = (data[6] & 0x0F) | 0x40;
 
   ByteString bsGUID;
   {
     // Span's lifetime must end before ReleaseBuffer() below.
-    pdfium::span<char> pBuf = bsGUID.GetBuffer(40);
+    pdfium::span<char> guid_span = bsGUID.GetBuffer(40);
     size_t out_index = 0;
     for (size_t i = 0; i < 16; ++i, out_index += 2) {
       if (bSeparator && (i == 4 || i == 6 || i == 8 || i == 10)) {
-        pBuf[out_index++] = L'-';
+        guid_span[out_index++] = L'-';
       }
-      FXSYS_IntToTwoHexChars(data[i], &pBuf[out_index]);
+      FXSYS_IntToTwoHexChars(data[i], guid_span.subspan(out_index).first<2u>());
     }
   }
   bsGUID.ReleaseBuffer(bSeparator ? 36 : 32);
@@ -549,17 +554,19 @@ void GetLocalTimeZone(int32_t* pHour, int32_t* pMin, int32_t* pSec) {
 
 bool HTMLSTR2Code(const WideString& pData, uint32_t* iCode) {
   auto cmpFunc = [](const XFA_FMHtmlReserveCode& iter, ByteStringView val) {
-    return strcmp(val.unterminated_c_str(), iter.m_htmlReserve) > 0;
+    return UNSAFE_TODO(strcmp(val.unterminated_c_str(), iter.html_reserve_)) >
+           0;
   };
-  if (!pData.IsASCII())
+  if (!pData.IsASCII()) {
     return false;
+  }
   ByteString temp = pData.ToASCII();
   const XFA_FMHtmlReserveCode* result = std::lower_bound(
       std::begin(kReservesForDecode), std::end(kReservesForDecode),
       temp.AsStringView(), cmpFunc);
   if (result != std::end(kReservesForDecode) &&
-      !strcmp(temp.c_str(), result->m_htmlReserve)) {
-    *iCode = result->m_uCode;
+      !UNSAFE_TODO(strcmp(temp.c_str(), result->html_reserve_))) {
+    *iCode = result->code_;
     return true;
   }
   return false;
@@ -567,13 +574,13 @@ bool HTMLSTR2Code(const WideString& pData, uint32_t* iCode) {
 
 bool HTMLCode2STR(uint32_t iCode, WideString* wsHTMLReserve) {
   auto cmpFunc = [](const XFA_FMHtmlReserveCode iter, const uint32_t& val) {
-    return iter.m_uCode < val;
+    return iter.code_ < val;
   };
   const XFA_FMHtmlReserveCode* result =
       std::lower_bound(std::begin(kReservesForEncode),
                        std::end(kReservesForEncode), iCode, cmpFunc);
-  if (result != std::end(kReservesForEncode) && result->m_uCode == iCode) {
-    *wsHTMLReserve = WideString::FromASCII(result->m_htmlReserve);
+  if (result != std::end(kReservesForEncode) && result->code_ == iCode) {
+    *wsHTMLReserve = WideString::FromASCII(result->html_reserve_);
     return true;
   }
   return false;
@@ -622,8 +629,9 @@ WideString DecodeMLInternal(const WideString& wsHTML, bool bIsHTML) {
         continue;
       }
 
-      if (++i >= iLen)
+      if (++i >= iLen) {
         break;
+      }
       ch = pData[i];
       if (ch == '#') {
         if (++i >= iLen) {
@@ -633,8 +641,9 @@ WideString DecodeMLInternal(const WideString& wsHTML, bool bIsHTML) {
         if (ch != 'x' && ch != 'X') {
           return WideString();
         }
-        if (++i >= iLen)
+        if (++i >= iLen) {
           break;
+        }
         ch = pData[i];
         uint32_t iCode = 0;
         while (ch != ';' && i < iLen) {
@@ -867,18 +876,20 @@ ByteString TrillionUS(ByteStringView bsData) {
   const char* pData = bsData.unterminated_c_str();
   int32_t iLength = bsData.GetLength();
   int32_t iComm = 0;
-  if (iLength > 12)
+  if (iLength > 12) {
     iComm = 4;
-  else if (iLength > 9)
+  } else if (iLength > 9) {
     iComm = 3;
-  else if (iLength > 6)
+  } else if (iLength > 6) {
     iComm = 2;
-  else if (iLength > 3)
+  } else if (iLength > 3) {
     iComm = 1;
+  }
 
   int32_t iFirstCount = iLength % 3;
-  if (iFirstCount == 0)
+  if (iFirstCount == 0) {
     iFirstCount = 3;
+  }
 
   ByteString strBuf;
   int32_t iIndex = 0;
@@ -954,45 +965,52 @@ ByteString TrillionUS(ByteStringView bsData) {
 }
 
 ByteString WordUS(ByteStringView bsData, int32_t iStyle) {
-  if (iStyle < 0 || iStyle > 2)
+  if (iStyle < 0 || iStyle > 2) {
     return ByteString();
+  }
 
   int32_t iLength = bsData.GetLength();
   ByteString strBuf;
   int32_t iIndex = 0;
   while (iIndex < iLength) {
-    if (bsData[iIndex] == '.')
+    if (bsData[iIndex] == '.') {
       break;
+    }
     ++iIndex;
   }
   int32_t iInteger = iIndex;
   iIndex = 0;
   while (iIndex < iInteger) {
     int32_t iCount = (iInteger - iIndex) % 12;
-    if (!iCount && iInteger - iIndex > 0)
+    if (!iCount && iInteger - iIndex > 0) {
       iCount = 12;
+    }
 
     strBuf += TrillionUS(bsData.Substr(iIndex, iCount));
     iIndex += iCount;
-    if (iIndex < iInteger)
+    if (iIndex < iInteger) {
       strBuf += " Trillion ";
+    }
   }
 
-  if (iStyle > 0)
+  if (iStyle > 0) {
     strBuf += " Dollars";
+  }
 
   if (iStyle > 1 && iInteger < iLength) {
     strBuf += " And ";
     iIndex = iInteger + 1;
     while (iIndex < iLength) {
       int32_t iCount = (iLength - iIndex) % 12;
-      if (!iCount && iLength - iIndex > 0)
+      if (!iCount && iLength - iIndex > 0) {
         iCount = 12;
+      }
 
       strBuf += TrillionUS(bsData.Substr(iIndex, iCount));
       iIndex += iCount;
-      if (iIndex < iLength)
+      if (iIndex < iLength) {
         strBuf += " Trillion ";
+      }
     }
     strBuf += " Cents";
   }
@@ -1002,8 +1020,9 @@ ByteString WordUS(ByteStringView bsData, int32_t iStyle) {
 v8::Local<v8::Value> GetObjectDefaultValue(v8::Isolate* pIsolate,
                                            v8::Local<v8::Object> pObject) {
   CXFA_Node* pNode = ToNode(CFXJSE_Engine::ToObject(pIsolate, pObject));
-  if (!pNode)
+  if (!pNode) {
     return fxv8::NewNullHelper(pIsolate);
+  }
 
   v8::Local<v8::Value> value;
   pNode->JSObject()->ScriptSomDefaultValue(pIsolate, &value, false,
@@ -1015,8 +1034,9 @@ bool SetObjectDefaultValue(v8::Isolate* pIsolate,
                            v8::Local<v8::Object> pObject,
                            v8::Local<v8::Value> hNewValue) {
   CXFA_Node* pNode = ToNode(CFXJSE_Engine::ToObject(pIsolate, pObject));
-  if (!pNode)
+  if (!pNode) {
     return false;
+  }
 
   pNode->JSObject()->ScriptSomDefaultValue(pIsolate, &hNewValue, true,
                                            XFA_Attribute::Unknown);
@@ -1025,25 +1045,29 @@ bool SetObjectDefaultValue(v8::Isolate* pIsolate,
 
 v8::Local<v8::Value> GetExtractedValue(v8::Isolate* pIsolate,
                                        v8::Local<v8::Value> pValue) {
-  if (pValue.IsEmpty())
+  if (pValue.IsEmpty()) {
     return v8::Local<v8::Value>();
+  }
 
   if (fxv8::IsArray(pValue)) {
     v8::Local<v8::Array> arr = pValue.As<v8::Array>();
     uint32_t iLength = fxv8::GetArrayLengthHelper(arr);
-    if (iLength < 3)
+    if (iLength < 3) {
       return fxv8::NewUndefinedHelper(pIsolate);
+    }
 
     v8::Local<v8::Value> propertyValue =
         fxv8::ReentrantGetArrayElementHelper(pIsolate, arr, 1);
     v8::Local<v8::Value> jsValue =
         fxv8::ReentrantGetArrayElementHelper(pIsolate, arr, 2);
-    if (!fxv8::IsObject(jsValue))
+    if (!fxv8::IsObject(jsValue)) {
       return fxv8::NewUndefinedHelper(pIsolate);
+    }
 
     v8::Local<v8::Object> jsObjectValue = jsValue.As<v8::Object>();
-    if (fxv8::IsNull(propertyValue))
+    if (fxv8::IsNull(propertyValue)) {
       return GetObjectDefaultValue(pIsolate, jsObjectValue);
+    }
 
     ByteString bsName =
         fxv8::ReentrantToByteStringHelper(pIsolate, propertyValue);
@@ -1051,8 +1075,9 @@ v8::Local<v8::Value> GetExtractedValue(v8::Isolate* pIsolate,
                                                   bsName.AsStringView());
   }
 
-  if (fxv8::IsObject(pValue))
+  if (fxv8::IsObject(pValue)) {
     return GetObjectDefaultValue(pIsolate, pValue.As<v8::Object>());
+  }
 
   return pValue;
 }
@@ -1071,15 +1096,17 @@ bool ValueIsNull(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 
 int32_t ValueToInteger(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
   v8::Local<v8::Value> extracted = GetExtractedValue(pIsolate, arg);
-  if (extracted.IsEmpty())
+  if (extracted.IsEmpty()) {
     return 0;
+  }
 
-  if (fxv8::IsObject(extracted) || fxv8::IsArray(extracted))
+  if (fxv8::IsObject(extracted) || fxv8::IsArray(extracted)) {
     return ValueToInteger(pIsolate, extracted);
+  }
 
   if (fxv8::IsString(extracted)) {
-    ByteString bsValue = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
-    return FXSYS_atoi(bsValue.c_str());
+    ByteString value = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
+    return StringToInt(value.AsStringView());
   }
 
   return fxv8::ReentrantToInt32Helper(pIsolate, extracted);
@@ -1087,18 +1114,21 @@ int32_t ValueToInteger(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 
 float ValueToFloat(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
   v8::Local<v8::Value> extracted = GetExtractedValue(pIsolate, arg);
-  if (extracted.IsEmpty())
+  if (extracted.IsEmpty()) {
     return 0.0f;
+  }
 
-  if (fxv8::IsUndefined(extracted))
+  if (fxv8::IsUndefined(extracted)) {
     return 0.0f;
+  }
 
-  if (fxv8::IsObject(extracted) || fxv8::IsArray(extracted))
+  if (fxv8::IsObject(extracted) || fxv8::IsArray(extracted)) {
     return ValueToFloat(pIsolate, extracted);
+  }
 
   if (fxv8::IsString(extracted)) {
     ByteString bsValue = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
-    return strtof(bsValue.c_str(), nullptr);
+    return StringToFloat(bsValue.AsStringView());
   }
 
   return fxv8::ReentrantToFloatHelper(pIsolate, extracted);
@@ -1106,18 +1136,21 @@ float ValueToFloat(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 
 double ValueToDouble(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
   v8::Local<v8::Value> extracted = GetExtractedValue(pIsolate, arg);
-  if (extracted.IsEmpty())
+  if (extracted.IsEmpty()) {
     return 0.0;
+  }
 
-  if (fxv8::IsUndefined(extracted))
+  if (fxv8::IsUndefined(extracted)) {
     return 0.0;
+  }
 
-  if (fxv8::IsObject(extracted) || fxv8::IsArray(extracted))
+  if (fxv8::IsObject(extracted) || fxv8::IsArray(extracted)) {
     return ValueToDouble(pIsolate, extracted);
+  }
 
   if (fxv8::IsString(extracted)) {
     ByteString bsValue = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
-    return strtod(bsValue.c_str(), nullptr);
+    return StringToDouble(bsValue.AsStringView());
   }
 
   return fxv8::ReentrantToDoubleHelper(pIsolate, extracted);
@@ -1125,23 +1158,27 @@ double ValueToDouble(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 
 std::optional<double> ExtractDouble(v8::Isolate* pIsolate,
                                     v8::Local<v8::Value> src) {
-  if (src.IsEmpty())
+  if (src.IsEmpty()) {
     return 0.0;
+  }
 
-  if (!fxv8::IsArray(src))
+  if (!fxv8::IsArray(src)) {
     return ValueToDouble(pIsolate, src);
+  }
 
   v8::Local<v8::Array> arr = src.As<v8::Array>();
   uint32_t iLength = fxv8::GetArrayLengthHelper(arr);
-  if (iLength < 3)
+  if (iLength < 3) {
     return std::nullopt;
+  }
 
   v8::Local<v8::Value> propertyValue =
       fxv8::ReentrantGetArrayElementHelper(pIsolate, arr, 1);
   v8::Local<v8::Value> jsValue =
       fxv8::ReentrantGetArrayElementHelper(pIsolate, arr, 2);
-  if (fxv8::IsNull(propertyValue) || !fxv8::IsObject(jsValue))
+  if (fxv8::IsNull(propertyValue) || !fxv8::IsObject(jsValue)) {
     return ValueToDouble(pIsolate, jsValue);
+  }
 
   ByteString bsName =
       fxv8::ReentrantToByteStringHelper(pIsolate, propertyValue);
@@ -1151,14 +1188,17 @@ std::optional<double> ExtractDouble(v8::Isolate* pIsolate,
 }
 
 ByteString ValueToUTF8String(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
-  if (arg.IsEmpty())
+  if (arg.IsEmpty()) {
     return ByteString();
+  }
 
-  if (fxv8::IsNull(arg) || fxv8::IsUndefined(arg))
+  if (fxv8::IsNull(arg) || fxv8::IsUndefined(arg)) {
     return ByteString();
+  }
 
-  if (fxv8::IsBoolean(arg))
+  if (fxv8::IsBoolean(arg)) {
     return fxv8::ReentrantToBooleanHelper(pIsolate, arg) ? "1" : "0";
+  }
 
   return fxv8::ReentrantToByteStringHelper(pIsolate, arg);
 }
@@ -1166,8 +1206,9 @@ ByteString ValueToUTF8String(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 bool SimpleValueCompare(v8::Isolate* pIsolate,
                         v8::Local<v8::Value> firstValue,
                         v8::Local<v8::Value> secondValue) {
-  if (firstValue.IsEmpty())
+  if (firstValue.IsEmpty()) {
     return false;
+  }
 
   if (fxv8::IsString(firstValue)) {
     const ByteString first = ValueToUTF8String(pIsolate, firstValue);
@@ -1196,8 +1237,9 @@ v8::LocalVector<v8::Value> UnfoldArgs(
     if (fxv8::IsArray(arg)) {
       v8::Local<v8::Array> arr = arg.As<v8::Array>();
       uint32_t iLength = fxv8::GetArrayLengthHelper(arr);
-      if (iLength < 3)
+      if (iLength < 3) {
         continue;
+      }
 
       v8::Local<v8::Value> propertyValue =
           fxv8::ReentrantGetArrayElementHelper(pIsolate, arr, 1);
@@ -1230,11 +1272,12 @@ v8::LocalVector<v8::Value> UnfoldArgs(
 // Returns empty value on failure.
 v8::Local<v8::Value> GetObjectForName(CFXJSE_HostObject* pHostObject,
                                       ByteStringView bsAccessorName) {
-  CXFA_Document* pDoc = ToFormCalcContext(pHostObject)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pHostObject)->GetDocument();
+  if (!doc) {
     return v8::Local<v8::Value>();
+  }
 
-  CFXJSE_Engine* pScriptContext = pDoc->GetScriptContext();
+  CFXJSE_Engine* pScriptContext = doc->GetScriptContext();
   std::optional<CFXJSE_Engine::ResolveResult> maybeResult =
       pScriptContext->ResolveObjects(
           pScriptContext->GetThisObject(),
@@ -1257,13 +1300,14 @@ std::optional<CFXJSE_Engine::ResolveResult> ResolveObjects(
     ByteStringView bsSomExp,
     bool bDotAccessor,
     bool bHasNoResolveName) {
-  CXFA_Document* pDoc = ToFormCalcContext(pHostObject)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pHostObject)->GetDocument();
+  if (!doc) {
     return std::nullopt;
+  }
 
   v8::Isolate* pIsolate = ToFormCalcContext(pHostObject)->GetIsolate();
   WideString wsSomExpression = WideString::FromUTF8(bsSomExp);
-  CFXJSE_Engine* pScriptContext = pDoc->GetScriptContext();
+  CFXJSE_Engine* pScriptContext = doc->GetScriptContext();
   CXFA_Object* pNode = nullptr;
   Mask<XFA_ResolveFlag> dwFlags;
   if (bDotAccessor) {
@@ -1272,19 +1316,22 @@ std::optional<CFXJSE_Engine::ResolveResult> ResolveObjects(
       dwFlags = {XFA_ResolveFlag::kSiblings, XFA_ResolveFlag::kParent};
     } else {
       pNode = CFXJSE_Engine::ToObject(pIsolate, pRefValue);
-      if (!pNode)
+      if (!pNode) {
         return std::nullopt;
+      }
 
       if (bHasNoResolveName) {
         WideString wsName;
         if (CXFA_Node* pXFANode = pNode->AsNode()) {
           std::optional<WideString> ret =
               pXFANode->JSObject()->TryAttribute(XFA_Attribute::Name, false);
-          if (ret.has_value())
+          if (ret.has_value()) {
             wsName = ret.value();
+          }
         }
-        if (wsName.IsEmpty())
+        if (wsName.IsEmpty()) {
           wsName = L"#" + WideString::FromASCII(pNode->GetClassName());
+        }
 
         wsSomExpression = wsName + wsSomExpression;
         dwFlags = XFA_ResolveFlag::kSiblings;
@@ -1336,8 +1383,9 @@ v8::LocalVector<v8::Value> ParseResolveResult(
       *bAttribute = false;
     }
   }
-  if (*bAttribute && fxv8::IsObject(pParentValue))
+  if (*bAttribute && fxv8::IsObject(pParentValue)) {
     resultValues.push_back(pParentValue);
+  }
 
   return resultValues;
 }
@@ -1356,13 +1404,13 @@ int GetValidatedPaymentPeriods(v8::Isolate* isolate, v8::Local<v8::Value> arg) {
 }  // namespace
 
 const FXJSE_CLASS_DESCRIPTOR kFormCalcDescriptor = {
-    kClassTag,                      // tag
-    "XFA_FormCalcClass",            // name
-    kFormCalcFunctions,             // methods
-    nullptr,                        // dynamic prop type
-    nullptr,                        // dynamic prop getter
-    nullptr,                        // dynamic prop setter
-    nullptr,                        // dynamic prop method call
+    kClassTag,            // tag
+    "XFA_FormCalcClass",  // name
+    kFormCalcFunctions,   // methods
+    nullptr,              // dynamic prop type
+    nullptr,              // dynamic prop getter
+    nullptr,              // dynamic prop setter
+    nullptr,              // dynamic prop method call
 };
 
 // static
@@ -1379,8 +1427,9 @@ void CFXJSE_FormCalcContext::Abs(
     return;
   }
   double dValue = ValueToDouble(info.GetIsolate(), info[0]);
-  if (dValue < 0)
+  if (dValue < 0) {
     dValue = -dValue;
+  }
 
   info.GetReturnValue().Set(dValue);
 }
@@ -1396,8 +1445,10 @@ void CFXJSE_FormCalcContext::Avg(
     dSum += ValueToDouble(pIsolate, pValue);
     uCount++;
   };
-  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/false))
+  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info,
+                                                  /*bStrict=*/false)) {
     return;
+  }
 
   if (uCount == 0) {
     info.GetReturnValue().SetNull();
@@ -1432,8 +1483,9 @@ void CFXJSE_FormCalcContext::Count(
   auto fn = [&iCount](v8::Isolate* pIsolate, v8::Local<v8::Value> pvalue) {
     ++iCount;
   };
-  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true))
+  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true)) {
     return;
+  }
 
   info.GetReturnValue().Set(iCount);
 }
@@ -1468,8 +1520,9 @@ void CFXJSE_FormCalcContext::Max(
     double dValue = ValueToDouble(pIsolate, pValue);
     dMaxValue = uCount == 1 ? dValue : std::max(dMaxValue, dValue);
   };
-  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true))
+  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true)) {
     return;
+  }
 
   if (uCount == 0) {
     info.GetReturnValue().SetNull();
@@ -1490,8 +1543,9 @@ void CFXJSE_FormCalcContext::Min(
     double dValue = ValueToDouble(pIsolate, pValue);
     dMinValue = uCount == 1 ? dValue : std::min(dMinValue, dValue);
   };
-  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true))
+  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true)) {
     return;
+  }
 
   if (uCount == 0) {
     info.GetReturnValue().SetNull();
@@ -1589,8 +1643,9 @@ void CFXJSE_FormCalcContext::Sum(
     ++uCount;
     dSum += ValueToDouble(pIsolate, pValue);
   };
-  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true))
+  if (!ToFormCalcContext(pThis)->ApplyToExpansion(fn, info, /*bStrict=*/true)) {
     return;
+  }
 
   if (uCount == 0) {
     info.GetReturnValue().SetNull();
@@ -1680,8 +1735,9 @@ void CFXJSE_FormCalcContext::DateFmt(
     }
 
     iStyle = static_cast<int32_t>(ValueToFloat(info.GetIsolate(), infotyle));
-    if (iStyle < 0 || iStyle > 4)
+    if (iStyle < 0 || iStyle > 4) {
       iStyle = 0;
+    }
   }
 
   ByteString bsLocale;
@@ -1733,8 +1789,8 @@ void CFXJSE_FormCalcContext::IsoTime2Num(
     return;
   }
 
-  CXFA_Document* pDoc = pContext->GetDocument();
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
+  CXFA_Document* doc = pContext->GetDocument();
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
   ByteString bsArg = ValueToUTF8String(info.GetIsolate(), argOne);
   auto pos = bsArg.Find('T', 0);
   if (!pos.has_value() || pos.value() == bsArg.GetLength() - 1) {
@@ -1760,10 +1816,12 @@ void CFXJSE_FormCalcContext::IsoTime2Num(
   //   consolidate.
   int32_t mins = hour * 60 + min;
   mins -= pMgr->GetDefLocale()->GetTimeZoneInMinutes();
-  while (mins > 1440)
+  while (mins > 1440) {
     mins -= 1440;
-  while (mins < 0)
+  }
+  while (mins < 0) {
     mins += 1440;
+  }
   hour = mins / 60;
   min = mins % 60;
 
@@ -1789,8 +1847,9 @@ void CFXJSE_FormCalcContext::LocalDateFmt(
       return;
     }
     iStyle = static_cast<int32_t>(ValueToFloat(info.GetIsolate(), infotyle));
-    if (iStyle > 4 || iStyle < 0)
+    if (iStyle > 4 || iStyle < 0) {
       iStyle = 0;
+    }
   }
 
   ByteString bsLocale;
@@ -1827,8 +1886,9 @@ void CFXJSE_FormCalcContext::LocalTimeFmt(
       return;
     }
     iStyle = static_cast<int32_t>(ValueToFloat(info.GetIsolate(), infotyle));
-    if (iStyle > 4 || iStyle < 0)
+    if (iStyle > 4 || iStyle < 0) {
       iStyle = 0;
+    }
   }
 
   ByteString bsLocale;
@@ -2139,22 +2199,24 @@ void CFXJSE_FormCalcContext::Time2Num(
     bsLocale = ValueToUTF8String(info.GetIsolate(), localeValue);
   }
 
-  CXFA_Document* pDoc = ToFormCalcContext(pThis)->GetDocument();
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
+  CXFA_Document* doc = ToFormCalcContext(pThis)->GetDocument();
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
   GCedLocaleIface* pLocale = nullptr;
   if (!bsLocale.IsEmpty()) {
     pLocale =
         pMgr->GetLocaleByName(WideString::FromUTF8(bsLocale.AsStringView()));
   }
   if (!pLocale) {
-    CXFA_Node* pThisNode = ToNode(pDoc->GetScriptContext()->GetThisObject());
+    CXFA_Node* pThisNode = ToNode(doc->GetScriptContext()->GetThisObject());
     pLocale = pThisNode->GetLocale();
   }
 
   WideString wsFormat;
   if (bsFormat.IsEmpty()) {
-    wsFormat =
-        pLocale->GetTimePattern(LocaleIface::DateTimeSubcategory::kDefault);
+    if (pLocale) {
+      wsFormat =
+          pLocale->GetTimePattern(LocaleIface::DateTimeSubcategory::kDefault);
+    }
   } else {
     wsFormat = WideString::FromUTF8(bsFormat.AsStringView());
   }
@@ -2173,12 +2235,13 @@ void CFXJSE_FormCalcContext::Time2Num(
   const int32_t second = uniTime.GetSecond();
   const int32_t millisecond = uniTime.GetMillisecond();
 
-  constexpr int kMinutesInDay = 24 * 60;
+  static constexpr int kMinutesInDay = 24 * 60;
   int32_t minutes_with_tz =
       hour * 60 + minute - CXFA_TimeZoneProvider().GetTimeZoneInMinutes();
   minutes_with_tz %= kMinutesInDay;
-  if (minutes_with_tz < 0)
+  if (minutes_with_tz < 0) {
     minutes_with_tz += kMinutesInDay;
+  }
 
   hour = minutes_with_tz / 60;
   minute = minutes_with_tz % 60;
@@ -2204,8 +2267,9 @@ void CFXJSE_FormCalcContext::TimeFmt(
       return;
     }
     iStyle = static_cast<int32_t>(ValueToFloat(info.GetIsolate(), infotyle));
-    if (iStyle > 4 || iStyle < 0)
+    if (iStyle > 4 || iStyle < 0) {
       iStyle = 0;
+    }
   }
 
   ByteString bsLocale;
@@ -2229,14 +2293,16 @@ ByteString CFXJSE_FormCalcContext::Local2IsoDate(CFXJSE_HostObject* pThis,
                                                  ByteStringView bsDate,
                                                  ByteStringView bsFormat,
                                                  ByteStringView bsLocale) {
-  CXFA_Document* pDoc = ToFormCalcContext(pThis)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pThis)->GetDocument();
+  if (!doc) {
     return ByteString();
+  }
 
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
-  GCedLocaleIface* pLocale = LocaleFromString(pDoc, pMgr, bsLocale);
-  if (!pLocale)
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
+  GCedLocaleIface* pLocale = LocaleFromString(doc, pMgr, bsLocale);
+  if (!pLocale) {
     return ByteString();
+  }
 
   WideString wsFormat = FormatFromString(pLocale, bsFormat);
   CFX_DateTime dt =
@@ -2253,14 +2319,16 @@ ByteString CFXJSE_FormCalcContext::IsoDate2Local(CFXJSE_HostObject* pThis,
                                                  ByteStringView bsDate,
                                                  ByteStringView bsFormat,
                                                  ByteStringView bsLocale) {
-  CXFA_Document* pDoc = ToFormCalcContext(pThis)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pThis)->GetDocument();
+  if (!doc) {
     return ByteString();
+  }
 
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
-  GCedLocaleIface* pLocale = LocaleFromString(pDoc, pMgr, bsLocale);
-  if (!pLocale)
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
+  GCedLocaleIface* pLocale = LocaleFromString(doc, pMgr, bsLocale);
+  if (!pLocale) {
     return ByteString();
+  }
 
   WideString wsFormat = FormatFromString(pLocale, bsFormat);
   WideString wsRet;
@@ -2275,14 +2343,16 @@ ByteString CFXJSE_FormCalcContext::IsoTime2Local(CFXJSE_HostObject* pThis,
                                                  ByteStringView bsTime,
                                                  ByteStringView bsFormat,
                                                  ByteStringView bsLocale) {
-  CXFA_Document* pDoc = ToFormCalcContext(pThis)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pThis)->GetDocument();
+  if (!doc) {
     return ByteString();
+  }
 
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
-  GCedLocaleIface* pLocale = LocaleFromString(pDoc, pMgr, bsLocale);
-  if (!pLocale)
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
+  GCedLocaleIface* pLocale = LocaleFromString(doc, pMgr, bsLocale);
+  if (!pLocale) {
     return ByteString();
+  }
 
   WideString wsFormat = {
       L"time{", FormatFromString(pLocale, bsFormat).AsStringView(), L"}"};
@@ -2299,11 +2369,12 @@ ByteString CFXJSE_FormCalcContext::GetLocalDateFormat(CFXJSE_HostObject* pThis,
                                                       int32_t iStyle,
                                                       ByteStringView bsLocale,
                                                       bool bStandard) {
-  CXFA_Document* pDoc = ToFormCalcContext(pThis)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pThis)->GetDocument();
+  if (!doc) {
     return ByteString();
+  }
 
-  return GetLocalDateTimeFormat(pDoc, iStyle, bsLocale, bStandard,
+  return GetLocalDateTimeFormat(doc, iStyle, bsLocale, bStandard,
                                 /*bIsDate=*/true);
 }
 
@@ -2312,11 +2383,12 @@ ByteString CFXJSE_FormCalcContext::GetLocalTimeFormat(CFXJSE_HostObject* pThis,
                                                       int32_t iStyle,
                                                       ByteStringView bsLocale,
                                                       bool bStandard) {
-  CXFA_Document* pDoc = ToFormCalcContext(pThis)->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = ToFormCalcContext(pThis)->GetDocument();
+  if (!doc) {
     return ByteString();
+  }
 
-  return GetLocalDateTimeFormat(pDoc, iStyle, bsLocale, bStandard,
+  return GetLocalDateTimeFormat(doc, iStyle, bsLocale, bStandard,
                                 /*bIsDate=*/false);
 }
 
@@ -2395,8 +2467,9 @@ void CFXJSE_FormCalcContext::Apr(
 
   double r = 2 * (nPeriods * nPayment - nPrincipal) / (nPeriods * nPrincipal);
   double nTemp = 1;
-  for (int32_t i = 0; i < nPeriods; ++i)
+  for (int32_t i = 0; i < nPeriods; ++i) {
     nTemp *= (1 + r);
+  }
 
   double nRet = r * nTemp / (nTemp - 1) - nPayment / nPrincipal;
   while (fabs(nRet) > kFinancialPrecision) {
@@ -2542,8 +2615,9 @@ void CFXJSE_FormCalcContext::IPmt(
   }
 
   int32_t i = 0;
-  for (i = 0; i < nFirstMonth - 1; ++i)
+  for (i = 0; i < nFirstMonth - 1; ++i) {
     nPrincipalAmount -= nPayment - nPrincipalAmount * nRateOfMonth;
+  }
 
   float nSum = 0;
   for (; i < iEnd; ++i) {
@@ -2676,8 +2750,9 @@ void CFXJSE_FormCalcContext::PPmt(
   }
 
   int32_t i = 0;
-  for (i = 0; i < nFirstMonth - 1; ++i)
+  for (i = 0; i < nFirstMonth - 1; ++i) {
     nPrincipalAmount -= nPayment - nPrincipalAmount * nRateOfMonth;
+  }
 
   float nTemp = 0;
   float nSum = 0;
@@ -2816,8 +2891,9 @@ void CFXJSE_FormCalcContext::Choose(
     if (fxv8::IsArray(argIndexValue)) {
       v8::Local<v8::Array> arr = argIndexValue.As<v8::Array>();
       uint32_t iLength = fxv8::GetArrayLengthHelper(arr);
-      if (iLength > 3)
+      if (iLength > 3) {
         bStopCounterFlags = true;
+      }
 
       iValueIndex += (iLength - 2);
       if (iValueIndex >= iIndex) {
@@ -2856,8 +2932,9 @@ void CFXJSE_FormCalcContext::Choose(
     }
     iArgIndex++;
   }
-  if (!bFound)
+  if (!bFound) {
     info.GetReturnValue().SetEmptyString();
+  }
 }
 
 // static
@@ -3223,7 +3300,7 @@ void CFXJSE_FormCalcContext::UnitValue(
       }
 
       while (uVal < bsUnitTemp.GetLength()) {
-        if (!isdigit(pChar[uVal]) && pChar[uVal] != '.') {
+        if (!FXSYS_IsDecimalDigit(pChar[uVal]) && pChar[uVal] != '.') {
           break;
         }
         ++uVal;
@@ -3355,8 +3432,9 @@ void CFXJSE_FormCalcContext::Concat(
   bool bAllNull = true;
   for (int32_t i = 0; i < argc; i++) {
     v8::Local<v8::Value> value = GetSimpleValue(info, i);
-    if (ValueIsNull(info.GetIsolate(), value))
+    if (ValueIsNull(info.GetIsolate(), value)) {
       continue;
+    }
 
     bAllNull = false;
     bsResult += ValueToUTF8String(info.GetIsolate(), value);
@@ -3409,12 +3487,13 @@ void CFXJSE_FormCalcContext::Decode(
 
   WideString wsToDecode = WideString::FromUTF8(bsToDecode.AsStringView());
 
-  if (bsIdentify.EqualNoCase("html"))
+  if (bsIdentify.EqualNoCase("html")) {
     decoded = DecodeHTML(wsToDecode);
-  else if (bsIdentify.EqualNoCase("xml"))
+  } else if (bsIdentify.EqualNoCase("xml")) {
     decoded = DecodeXML(wsToDecode);
-  else
+  } else {
     decoded = DecodeURL(wsToDecode);
+  }
 
   auto result = FX_UTF8Encode(decoded.AsStringView());
   info.GetReturnValue().Set(
@@ -3456,12 +3535,13 @@ void CFXJSE_FormCalcContext::Encode(
   ByteString bsToEncode = ValueToUTF8String(info.GetIsolate(), argOne);
   ByteString bsIdentify = ValueToUTF8String(info.GetIsolate(), argTwo);
   WideString encoded;
-  if (bsIdentify.EqualNoCase("html"))
+  if (bsIdentify.EqualNoCase("html")) {
     encoded = EncodeHTML(bsToEncode);
-  else if (bsIdentify.EqualNoCase("xml"))
+  } else if (bsIdentify.EqualNoCase("xml")) {
     encoded = EncodeXML(bsToEncode);
-  else
+  } else {
     encoded = EncodeURL(bsToEncode);
+  }
 
   auto result = FX_UTF8Encode(encoded.AsStringView());
   info.GetReturnValue().Set(
@@ -3484,9 +3564,9 @@ void CFXJSE_FormCalcContext::Format(
   v8::Local<v8::Value> argTwo = GetSimpleValue(info, 1);
   ByteString bsValue = ValueToUTF8String(info.GetIsolate(), argTwo);
 
-  CXFA_Document* pDoc = pContext->GetDocument();
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
-  CXFA_Node* pThisNode = ToNode(pDoc->GetScriptContext()->GetThisObject());
+  CXFA_Document* doc = pContext->GetDocument();
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
+  CXFA_Node* pThisNode = ToNode(doc->GetScriptContext()->GetThisObject());
   GCedLocaleIface* pLocale = pThisNode->GetLocale();
   WideString wsPattern = WideString::FromUTF8(bsPattern.AsStringView());
   WideString wsValue = WideString::FromUTF8(bsValue.AsStringView());
@@ -3608,10 +3688,11 @@ void CFXJSE_FormCalcContext::Lower(
   ByteString bsArg = ValueToUTF8String(info.GetIsolate(), argOne);
   WideString wsArg = WideString::FromUTF8(bsArg.AsStringView());
   for (wchar_t ch : wsArg) {
-    if ((ch >= 0x41 && ch <= 0x5A) || (ch >= 0xC0 && ch <= 0xDE))
+    if ((ch >= 0x41 && ch <= 0x5A) || (ch >= 0xC0 && ch <= 0xDE)) {
       ch += 32;
-    else if (ch == 0x100 || ch == 0x102 || ch == 0x104)
+    } else if (ch == 0x100 || ch == 0x102 || ch == 0x104) {
       ch += 1;
+    }
     szLowBuf.AppendChar(ch);
   }
   auto result = FX_UTF8Encode(szLowBuf.AsStringView());
@@ -3659,9 +3740,9 @@ void CFXJSE_FormCalcContext::Parse(
 
   ByteString bsPattern = ValueToUTF8String(info.GetIsolate(), argOne);
   ByteString bsValue = ValueToUTF8String(info.GetIsolate(), argTwo);
-  CXFA_Document* pDoc = pContext->GetDocument();
-  CXFA_LocaleMgr* pMgr = pDoc->GetLocaleMgr();
-  CXFA_Node* pThisNode = ToNode(pDoc->GetScriptContext()->GetThisObject());
+  CXFA_Document* doc = pContext->GetDocument();
+  CXFA_LocaleMgr* pMgr = doc->GetLocaleMgr();
+  CXFA_Node* pThisNode = ToNode(doc->GetScriptContext()->GetThisObject());
   GCedLocaleIface* pLocale = pThisNode->GetLocale();
   WideString wsPattern = WideString::FromUTF8(bsPattern.AsStringView());
   WideString wsValue = WideString::FromUTF8(bsValue.AsStringView());
@@ -3899,7 +3980,7 @@ void CFXJSE_FormCalcContext::Str(
   }
   float fNumber = ValueToFloat(info.GetIsolate(), numberValue);
 
-  constexpr int32_t kDefaultWidth = 10;
+  static constexpr int32_t kDefaultWidth = 10;
   int32_t iWidth = kDefaultWidth;
   if (argc > 1) {
     v8::Local<v8::Value> widthValue = GetSimpleValue(info, 1);
@@ -3910,10 +3991,10 @@ void CFXJSE_FormCalcContext::Str(
     }
   }
 
-  constexpr int32_t kDefaultPrecision = 0;
+  static constexpr int32_t kDefaultPrecision = 0;
   int32_t iPrecision = kDefaultPrecision;
   if (argc > 2) {
-    constexpr int32_t kMaxPrecision = 15;
+    static constexpr int32_t kMaxPrecision = 15;
     v8::Local<v8::Value> precision_value = GetSimpleValue(info, 2);
     iPrecision = std::max(0, static_cast<int32_t>(ValueToFloat(
                                  info.GetIsolate(), precision_value)));
@@ -4135,10 +4216,11 @@ void CFXJSE_FormCalcContext::Upper(
   WideString upperStringBuf;
   upperStringBuf.Reserve(wsArg.GetLength());
   for (wchar_t ch : wsArg) {
-    if ((ch >= 0x61 && ch <= 0x7A) || (ch >= 0xE0 && ch <= 0xFE))
+    if ((ch >= 0x61 && ch <= 0x7A) || (ch >= 0xE0 && ch <= 0xFE)) {
       ch -= 32;
-    else if (ch == 0x101 || ch == 0x103 || ch == 0x105)
+    } else if (ch == 0x101 || ch == 0x103 || ch == 0x105) {
       ch -= 1;
+    }
 
     upperStringBuf += ch;
   }
@@ -4205,20 +4287,23 @@ void CFXJSE_FormCalcContext::Get(
     return;
   }
 
-  CXFA_Document* pDoc = pContext->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = pContext->GetDocument();
+  if (!doc) {
     return;
+  }
 
-  CXFA_FFApp::CallbackIface* pAppProvider = pDoc->GetNotify()->GetAppProvider();
-  if (!pAppProvider)
+  CXFA_FFApp::CallbackIface* pAppProvider = doc->GetNotify()->GetAppProvider();
+  if (!pAppProvider) {
     return;
+  }
 
   v8::Local<v8::Value> argOne = GetSimpleValue(info, 0);
   ByteString bsUrl = ValueToUTF8String(info.GetIsolate(), argOne);
   RetainPtr<IFX_SeekableReadStream> pFile =
       pAppProvider->DownloadURL(WideString::FromUTF8(bsUrl.AsStringView()));
-  if (!pFile)
+  if (!pFile) {
     return;
+  }
 
   FX_FILESIZE size = pFile->GetSize();
   DataVector<uint8_t> data_buf(size);
@@ -4240,13 +4325,15 @@ void CFXJSE_FormCalcContext::Post(
     return;
   }
 
-  CXFA_Document* pDoc = pContext->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = pContext->GetDocument();
+  if (!doc) {
     return;
+  }
 
-  CXFA_FFApp::CallbackIface* pAppProvider = pDoc->GetNotify()->GetAppProvider();
-  if (!pAppProvider)
+  CXFA_FFApp::CallbackIface* pAppProvider = doc->GetNotify()->GetAppProvider();
+  if (!pAppProvider) {
     return;
+  }
 
   v8::Local<v8::Value> argOne = GetSimpleValue(info, 0);
   ByteString bsURL = ValueToUTF8String(info.GetIsolate(), argOne);
@@ -4297,13 +4384,15 @@ void CFXJSE_FormCalcContext::Put(
     return;
   }
 
-  CXFA_Document* pDoc = pContext->GetDocument();
-  if (!pDoc)
+  CXFA_Document* doc = pContext->GetDocument();
+  if (!doc) {
     return;
+  }
 
-  CXFA_FFApp::CallbackIface* pAppProvider = pDoc->GetNotify()->GetAppProvider();
-  if (!pAppProvider)
+  CXFA_FFApp::CallbackIface* pAppProvider = doc->GetNotify()->GetAppProvider();
+  if (!pAppProvider) {
     return;
+  }
 
   v8::Local<v8::Value> argOne = GetSimpleValue(info, 0);
   ByteString bsURL = ValueToUTF8String(info.GetIsolate(), argOne);
@@ -4490,8 +4579,9 @@ bool CFXJSE_FormCalcContext::fm_ref_equal(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Value> argFirst = info[0];
   v8::Local<v8::Value> argSecond = info[1];
-  if (!fxv8::IsArray(argFirst) || !fxv8::IsArray(argSecond))
+  if (!fxv8::IsArray(argFirst) || !fxv8::IsArray(argSecond)) {
     return false;
+  }
 
   v8::Local<v8::Array> firstArr = argFirst.As<v8::Array>();
   v8::Local<v8::Array> secondArr = argSecond.As<v8::Array>();
@@ -4509,8 +4599,9 @@ bool CFXJSE_FormCalcContext::fm_ref_equal(
   v8::Local<v8::Value> secondValue =
       fxv8::ReentrantGetArrayElementHelper(info.GetIsolate(), secondArr, 2);
 
-  if (fxv8::IsNull(firstValue) || fxv8::IsNull(secondValue))
+  if (fxv8::IsNull(firstValue) || fxv8::IsNull(secondValue)) {
     return false;
+  }
 
   return FXJSE_RetrieveObjectBinding(firstValue) ==
          FXJSE_RetrieveObjectBinding(secondValue);
@@ -4965,13 +5056,15 @@ ByteString CFXJSE_FormCalcContext::GenerateSomExpression(ByteStringView bsName,
                                                          int32_t iIndexFlags,
                                                          int32_t iIndexValue,
                                                          bool bIsStar) {
-  if (bIsStar)
+  if (bIsStar) {
     return ByteString(bsName, "[*]");
+  }
 
   // `iIndexFlags` values are the same as enum class
   // `CXFA_FMIndexExpression::AccessorIndex` values.
-  if (iIndexFlags == 0)
+  if (iIndexFlags == 0) {
     return ByteString(bsName);
+  }
 
   if (iIndexFlags == 1 || iIndexValue == 0) {
     return ByteString(bsName, "[") + ByteString::FormatInteger(iIndexValue) +
@@ -4988,8 +5081,9 @@ ByteString CFXJSE_FormCalcContext::GenerateSomExpression(ByteStringView bsName,
   }
 
   FX_SAFE_INT32 safe_index = iIndexValue;
-  if (bNegative)
+  if (bNegative) {
     safe_index = -safe_index;
+  }
   bsSomExp += ByteString::FormatInteger(safe_index.ValueOrDefault(0));
   bsSomExp += "]";
   return bsSomExp;
@@ -4998,35 +5092,39 @@ ByteString CFXJSE_FormCalcContext::GenerateSomExpression(ByteStringView bsName,
 std::optional<WideTextBuffer> CFXJSE_FormCalcContext::Translate(
     cppgc::Heap* pHeap,
     WideStringView wsFormcalc) {
-  if (wsFormcalc.IsEmpty())
+  if (wsFormcalc.IsEmpty()) {
     return WideTextBuffer();
+  }
 
   CXFA_FMLexer lexer(wsFormcalc);
   CXFA_FMParser parser(pHeap, &lexer);
   CXFA_FMAST* ast = parser.Parse();
-  if (!ast || parser.HasError())
+  if (!ast || parser.HasError()) {
     return std::nullopt;
+  }
 
   CXFA_FMToJavaScriptDepth::Reset();
   std::optional<WideTextBuffer> wsJavaScript = ast->ToJavaScript();
-  if (!wsJavaScript.has_value())
+  if (!wsJavaScript.has_value()) {
     return std::nullopt;
+  }
 
-  if (CXFA_IsTooBig(wsJavaScript.value()))
+  if (CXFA_IsTooBig(wsJavaScript.value())) {
     return std::nullopt;
+  }
 
   return wsJavaScript;
 }
 
 CFXJSE_FormCalcContext::CFXJSE_FormCalcContext(v8::Isolate* pIsolate,
                                                CFXJSE_Context* pScriptContext,
-                                               CXFA_Document* pDoc)
-    : m_pIsolate(pIsolate), m_pDocument(pDoc) {
-  m_Value.Reset(m_pIsolate,
-                NewBoundV8Object(
-                    m_pIsolate, CFXJSE_Class::Create(
-                                    pScriptContext, &kFormCalcDescriptor, false)
-                                    ->GetTemplate(m_pIsolate)));
+                                               CXFA_Document* doc)
+    : isolate_(pIsolate), document_(doc) {
+  value_.Reset(isolate_,
+               NewBoundV8Object(
+                   isolate_, CFXJSE_Class::Create(pScriptContext,
+                                                  &kFormCalcDescriptor, false)
+                                 ->GetTemplate(isolate_)));
 }
 
 CFXJSE_FormCalcContext::~CFXJSE_FormCalcContext() = default;
@@ -5036,7 +5134,7 @@ CFXJSE_FormCalcContext* CFXJSE_FormCalcContext::AsFormCalcContext() {
 }
 
 v8::Local<v8::Value> CFXJSE_FormCalcContext::GlobalPropertyGetter() {
-  return v8::Local<v8::Value>::New(m_pIsolate, m_Value);
+  return v8::Local<v8::Value>::New(isolate_, value_);
 }
 
 // static
@@ -5107,8 +5205,9 @@ void CFXJSE_FormCalcContext::DotAccessorCommon(
                          .As<v8::Value>()
                    : fxv8::NewNullHelper(pIsolate).As<v8::Value>());
     for (uint32_t i = 0; i < iLength - 2; i++) {
-      for (size_t j = 0; j < resolveValues[i].size(); j++)
+      for (size_t j = 0; j < resolveValues[i].size(); j++) {
         values.push_back(resolveValues[i][j]);
+      }
     }
     info.GetReturnValue().Set(fxv8::NewArrayHelper(pIsolate, values));
     return;
@@ -5147,8 +5246,9 @@ void CFXJSE_FormCalcContext::DotAccessorCommon(
                         .As<v8::Value>()
                   : fxv8::NewNullHelper(pIsolate).As<v8::Value>();
 
-  for (size_t i = 0; i < resolveValues.size(); i++)
+  for (size_t i = 0; i < resolveValues.size(); i++) {
     values[i + 2] = resolveValues[i];
+  }
 
   info.GetReturnValue().Set(fxv8::NewArrayHelper(pIsolate, values));
 }
@@ -5174,7 +5274,7 @@ bool CFXJSE_FormCalcContext::IsIsoDateFormat(ByteStringView bsData,
 
   std::array<char, 5> szYear = {};
   for (int32_t i = 0; i < 4; ++i) {
-    if (!isdigit(pData[i])) {
+    if (!FXSYS_IsDecimalDigit(pData[i])) {
       return false;
     }
     szYear[i] = pData[i];
@@ -5186,7 +5286,8 @@ bool CFXJSE_FormCalcContext::IsIsoDateFormat(ByteStringView bsData,
 
   int32_t iStyle = pData[4] == '-' ? 1 : 0;
   size_t iPosOff = iStyle == 0 ? 4 : 5;
-  if (!isdigit(pData[iPosOff]) || !isdigit(pData[iPosOff + 1])) {
+  if (!FXSYS_IsDecimalDigit(pData[iPosOff]) ||
+      !FXSYS_IsDecimalDigit(pData[iPosOff + 1])) {
     return false;
   }
 
@@ -5209,7 +5310,8 @@ bool CFXJSE_FormCalcContext::IsIsoDateFormat(ByteStringView bsData,
       return true;
     }
   }
-  if (!isdigit(pData[iPosOff]) || !isdigit(pData[iPosOff + 1])) {
+  if (!FXSYS_IsDecimalDigit(pData[iPosOff]) ||
+      !FXSYS_IsDecimalDigit(pData[iPosOff + 1])) {
     return false;
   }
 
@@ -5243,7 +5345,7 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   size_t iZone = 0;
   size_t i = 0;
   while (i < pData.size()) {
-    if (!isdigit(pData[i]) && pData[i] != ':') {
+    if (!FXSYS_IsDecimalDigit(pData[i]) && pData[i] != ':') {
       iZone = i;
       break;
     }
@@ -5259,7 +5361,8 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   while (iIndex + 1 < iZone) {
     szBuffer[0] = pData[iIndex];
     szBuffer[1] = pData[iIndex + 1];
-    if (!isdigit(szBuffer[0]) || !isdigit(szBuffer[1])) {
+    if (!FXSYS_IsDecimalDigit(szBuffer[0]) ||
+        !FXSYS_IsDecimalDigit(szBuffer[1])) {
       return false;
     }
     int32_t value = FXSYS_atoi(szBuffer);
@@ -5289,7 +5392,7 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   }
 
   if (iIndex < pData.size() && pData[iIndex] == '.') {
-    constexpr int kSubSecondLength = 3;
+    static constexpr int kSubSecondLength = 3;
     if (iIndex + kSubSecondLength >= pData.size()) {
       return false;
     }
@@ -5298,7 +5401,7 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
     std::array<char, kSubSecondLength + 1> szMilliSeconds = {};
     for (int j = 0; j < kSubSecondLength; ++j) {
       char c = pData[iIndex + j];
-      if (!isdigit(c)) {
+      if (!FXSYS_IsDecimalDigit(c)) {
         return false;
       }
       szMilliSeconds[j] = c;
@@ -5324,7 +5427,8 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   while (iIndex + 1 < pData.size()) {
     szBuffer[0] = pData[iIndex];
     szBuffer[1] = pData[iIndex + 1];
-    if (!isdigit(szBuffer[0]) || !isdigit(szBuffer[1])) {
+    if (!FXSYS_IsDecimalDigit(szBuffer[0]) ||
+        !FXSYS_IsDecimalDigit(szBuffer[1])) {
       return false;
     }
     int32_t value = FXSYS_atoi(szBuffer);
@@ -5450,30 +5554,34 @@ bool CFXJSE_FormCalcContext::ApplyToArray(
     std::function<void(v8::Isolate*, v8::Local<v8::Value>)> fn,
     v8::Local<v8::Array> pArray) {
   uint32_t iLength = fxv8::GetArrayLengthHelper(pArray);
-  if (iLength < 3)
+  if (iLength < 3) {
     return false;
+  }
 
   v8::Local<v8::Value> propertyValue =
       fxv8::ReentrantGetArrayElementHelper(pIsolate, pArray, 1);
 
   ByteString bsName;
   const bool nullprop = fxv8::IsNull(propertyValue);
-  if (!nullprop)
+  if (!nullprop) {
     bsName = fxv8::ReentrantToByteStringHelper(pIsolate, propertyValue);
+  }
 
   for (uint32_t j = 2; j < iLength; j++) {
     v8::Local<v8::Value> jsValue =
         fxv8::ReentrantGetArrayElementHelper(pIsolate, pArray, j);
-    if (!fxv8::IsObject(jsValue))
+    if (!fxv8::IsObject(jsValue)) {
       continue;
+    }
 
     v8::Local<v8::Object> jsObjectValue = jsValue.As<v8::Object>();
     v8::Local<v8::Value> newPropertyValue =
         nullprop ? GetObjectDefaultValue(pIsolate, jsObjectValue)
                  : fxv8::ReentrantGetObjectPropertyHelper(
                        pIsolate, jsObjectValue, bsName.AsStringView());
-    if (!fxv8::IsNull(newPropertyValue))
+    if (!fxv8::IsNull(newPropertyValue)) {
       fn(pIsolate, newPropertyValue);
+    }
   }
   return true;
 }
@@ -5484,8 +5592,9 @@ void CFXJSE_FormCalcContext::ApplyToObject(
     v8::Local<v8::Object> pObject) {
   v8::Local<v8::Value> newPropertyValue =
       GetObjectDefaultValue(pIsolate, pObject);
-  if (!fxv8::IsNull(newPropertyValue))
+  if (!fxv8::IsNull(newPropertyValue)) {
     fn(pIsolate, newPropertyValue);
+  }
 }
 
 void CFXJSE_FormCalcContext::ThrowNoDefaultPropertyException(

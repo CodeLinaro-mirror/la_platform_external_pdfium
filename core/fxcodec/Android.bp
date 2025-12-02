@@ -41,5 +41,6 @@ cc_library_static {
 
     srcs: [
         "**/*.cpp",
+        "**/*.c",
     ],
 }

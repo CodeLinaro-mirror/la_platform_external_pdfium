@@ -43,7 +43,7 @@ TEST(CPDFLinkExtractTest, CheckMailLink) {
     const wchar_t* expected_output;
   };
   // Check cases that can extract valid mail link.
-  constexpr IOPair kValidStrings[] = {
+  static constexpr IOPair kValidStrings[] = {
       {L"peter@abc.d", L"peter@abc.d"},
       {L"red.teddy.b@abc.com", L"red.teddy.b@abc.com"},
       {L"abc_@gmail.com", L"abc_@gmail.com"},  // '_' is ok before '@'.
@@ -175,8 +175,8 @@ TEST(CPDFLinkExtractTest, CheckWebLink) {
   for (const auto& it : kValidCases) {
     auto maybe_link = extractor.CheckWebLink(it.input_string);
     ASSERT_TRUE(maybe_link.has_value()) << it.input_string;
-    EXPECT_EQ(it.url_extracted, maybe_link.value().m_strUrl);
-    EXPECT_EQ(it.start_offset, maybe_link.value().m_Start) << it.input_string;
-    EXPECT_EQ(it.count, maybe_link.value().m_Count) << it.input_string;
+    EXPECT_EQ(it.url_extracted, maybe_link.value().url_);
+    EXPECT_EQ(it.start_offset, maybe_link.value().start_) << it.input_string;
+    EXPECT_EQ(it.count, maybe_link.value().count_) << it.input_string;
   }
 }

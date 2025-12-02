@@ -38,6 +38,21 @@ class CFX_Face final : public Retainable, public Observable {
     uint32_t glyph_index;
   };
 
+  // Note that this corresponds to the cmap header in fonts, and not the cmap
+  // data in PDFs.
+  struct CharMapId {
+    friend constexpr bool operator==(const CharMapId&,
+                                     const CharMapId&) = default;
+
+    int platform_id;
+    int encoding_id;
+  };
+
+  // Aliases for some commonly used cmaps.
+  static constexpr CharMapId kMacRomanCmapId{1, 0};
+  static constexpr CharMapId kWindowsSymbolCmapId{3, 0};
+  static constexpr CharMapId kWindowsUnicodeCmapId{3, 1};
+
   static RetainPtr<CFX_Face> New(FT_Library library,
                                  RetainPtr<Retainable> pDesc,
                                  pdfium::span<const FT_Byte> data,
@@ -67,9 +82,6 @@ class CFX_Face final : public Retainable, public Observable {
   uint16_t GetUnitsPerEm() const;
   int16_t GetAscender() const;
   int16_t GetDescender() const;
-#if BUILDFLAG(IS_ANDROID)
-  int16_t GetHeight() const;
-#endif
 
   pdfium::span<uint8_t> GetData() const;
 
@@ -84,7 +96,7 @@ class CFX_Face final : public Retainable, public Observable {
   int GetGlyphCount() const;
   // TODO(crbug.com/pdfium/2037): Can this method be private?
   FX_RECT GetGlyphBBox() const;
-  std::unique_ptr<CFX_GlyphBitmap> RenderGlyph(const CFX_Font* pFont,
+  std::unique_ptr<CFX_GlyphBitmap> RenderGlyph(const CFX_Font* font,
                                                uint32_t glyph_index,
                                                bool bFontStyle,
                                                const CFX_Matrix& matrix,
@@ -109,6 +121,7 @@ class CFX_Face final : public Retainable, public Observable {
 
   CharMap GetCurrentCharMap() const;
   std::optional<fxge::FontEncoding> GetCurrentCharMapEncoding() const;
+  CharMapId GetCharMapIdByIndex(size_t index) const;
   int GetCharMapPlatformIdByIndex(size_t index) const;
   int GetCharMapEncodingIdByIndex(size_t index) const;
   fxge::FontEncoding GetCharMapEncodingByIndex(size_t index) const;
@@ -123,8 +136,8 @@ class CFX_Face final : public Retainable, public Observable {
   bool CanEmbed();
 #endif
 
-  FXFT_FaceRec* GetRec() { return m_pRec.get(); }
-  const FXFT_FaceRec* GetRec() const { return m_pRec.get(); }
+  FXFT_FaceRec* GetRec() { return rec_.get(); }
+  const FXFT_FaceRec* GetRec() const { return rec_.get(); }
 
  private:
   CFX_Face(FXFT_FaceRec* pRec, RetainPtr<Retainable> pDesc);
@@ -132,8 +145,8 @@ class CFX_Face final : public Retainable, public Observable {
 
   void AdjustVariationParams(int glyph_index, int dest_width, int weight);
 
-  ScopedFXFTFaceRec const m_pRec;
-  RetainPtr<Retainable> const m_pDesc;
+  ScopedFXFTFaceRec const rec_;
+  RetainPtr<Retainable> const desc_;
 };
 
 #endif  // CORE_FXGE_CFX_FACE_H_

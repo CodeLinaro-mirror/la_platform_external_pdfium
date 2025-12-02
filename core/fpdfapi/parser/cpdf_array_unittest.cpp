@@ -4,6 +4,7 @@
 
 #include "core/fpdfapi/parser/cpdf_array.h"
 
+#include <array>
 #include <iterator>
 #include <memory>
 #include <utility>
@@ -40,19 +41,21 @@ TEST(ArrayTest, RemoveAt) {
     for (const int elem : {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
       arr->AppendNew<CPDF_Number>(elem);
     }
-    for (size_t i = 0; i < 3; ++i)
+    for (size_t i = 0; i < 3; ++i) {
       arr->RemoveAt(3);
-    constexpr std::array<int, 7> expected = {{1, 2, 3, 7, 8, 9, 10}};
+    }
+    static constexpr std::array<int, 7> expected = {{1, 2, 3, 7, 8, 9, 10}};
     ASSERT_EQ(expected.size(), arr->size());
     for (size_t i = 0; i < expected.size(); ++i) {
       EXPECT_EQ(expected[i], arr->GetIntegerAt(i));
     }
     arr->RemoveAt(4);
     arr->RemoveAt(4);
-    constexpr std::array<int, 5> expected2 = {{1, 2, 3, 7, 10}};
+    static constexpr std::array<int, 5> expected2 = {{1, 2, 3, 7, 10}};
     ASSERT_EQ(std::size(expected2), arr->size());
-    for (size_t i = 0; i < std::size(expected2); ++i)
+    for (size_t i = 0; i < std::size(expected2); ++i) {
       EXPECT_EQ(expected2[i], arr->GetIntegerAt(i));
+    }
   }
   {
     // When the range is out of bound, RemoveAt() has no effect.
@@ -84,7 +87,8 @@ TEST(ArrayTest, SetAtBeyond) {
 }
 
 TEST(ArrayTest, InsertAt) {
-  constexpr std::array<int, 10> elems = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}};
+  static constexpr std::array<int, 10> elems = {
+      {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}};
   auto arr = pdfium::MakeRetain<CPDF_Array>();
   for (size_t i = 0; i < std::size(elems); ++i) {
     arr->InsertNewAt<CPDF_Number>(i, elems[i]);
@@ -96,7 +100,7 @@ TEST(ArrayTest, InsertAt) {
   arr->InsertNewAt<CPDF_Number>(3, 33);
   arr->InsertNewAt<CPDF_Number>(6, 55);
   arr->InsertNewAt<CPDF_Number>(12, 12);
-  constexpr std::array<int, 13> expected = {
+  static constexpr std::array<int, 13> expected = {
       {1, 2, 3, 33, 4, 5, 55, 6, 7, 8, 9, 10, 12}};
   ASSERT_EQ(expected.size(), arr->size());
   for (size_t i = 0; i < expected.size(); ++i) {
@@ -114,7 +118,8 @@ TEST(ArrayTest, InsertAtBeyond) {
 TEST(ArrayTest, Clone) {
   {
     // Basic case.
-    constexpr std::array<int, 10> elems = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}};
+    static constexpr std::array<int, 10> elems = {
+        {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}};
     auto arr = pdfium::MakeRetain<CPDF_Array>();
     for (size_t i = 0; i < std::size(elems); ++i) {
       arr->InsertNewAt<CPDF_Number>(i, elems[i]);
@@ -132,7 +137,7 @@ TEST(ArrayTest, Clone) {
     static const size_t kNumOfRows = 3;
     static const size_t kNumOfColumns = 5;
     using ElemRow = std::array<int, kNumOfColumns>;
-    constexpr std::array<ElemRow, kNumOfRows> elems = {{
+    static constexpr std::array<ElemRow, kNumOfRows> elems = {{
         {{1, 2, 3, 4, 5}},
         {{10, 9, 8, 7, 6}},
         {{11, 12, 13, 14, 15}},
@@ -146,8 +151,8 @@ TEST(ArrayTest, Clone) {
         auto obj = pdfium::MakeRetain<CPDF_Number>(elems[i][j]);
         // Starts object number from 1.
         int obj_num = i * kNumOfColumns + j + 1;
-        obj_holder->ReplaceIndirectObjectIfHigherGeneration(obj_num,
-                                                            std::move(obj));
+        ASSERT_TRUE(obj_holder->ReplaceIndirectObjectIfHigherGeneration(
+            obj_num, std::move(obj)));
         arr_elem->InsertNewAt<CPDF_Reference>(j, obj_holder.get(), obj_num);
       }
       arr->InsertAt(i, std::move(arr_elem));
@@ -235,7 +240,7 @@ TEST(ArrayTest, Contains) {
 }
 
 TEST(ArrayTest, Iterator) {
-  constexpr std::array<int, 10> elems = {
+  static constexpr std::array<int, 10> elems = {
       {-23, -11, 3, 455, 2345877, 0, 7895330, -12564334, 10000, -100000}};
   auto arr = pdfium::MakeRetain<CPDF_Array>();
   for (size_t i = 0; i < std::size(elems); ++i) {

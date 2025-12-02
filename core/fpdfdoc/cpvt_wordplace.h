@@ -31,25 +31,24 @@ struct CPVT_WordPlace {
     nWordIndex = -1;
   }
 
-  inline bool operator==(const CPVT_WordPlace& wp) const {
-    return wp.nSecIndex == nSecIndex && wp.nLineIndex == nLineIndex &&
-           wp.nWordIndex == nWordIndex;
-  }
-  inline bool operator!=(const CPVT_WordPlace& wp) const {
-    return !(*this == wp);
-  }
+  friend constexpr bool operator==(const CPVT_WordPlace&,
+                                   const CPVT_WordPlace&) = default;
   inline bool operator<(const CPVT_WordPlace& wp) const {
-    if (nSecIndex != wp.nSecIndex)
+    if (nSecIndex != wp.nSecIndex) {
       return nSecIndex < wp.nSecIndex;
-    if (nLineIndex != wp.nLineIndex)
+    }
+    if (nLineIndex != wp.nLineIndex) {
       return nLineIndex < wp.nLineIndex;
+    }
     return nWordIndex < wp.nWordIndex;
   }
   inline bool operator>(const CPVT_WordPlace& wp) const {
-    if (nSecIndex != wp.nSecIndex)
+    if (nSecIndex != wp.nSecIndex) {
       return nSecIndex > wp.nSecIndex;
-    if (nLineIndex != wp.nLineIndex)
+    }
+    if (nLineIndex != wp.nLineIndex) {
       return nLineIndex > wp.nLineIndex;
+    }
     return nWordIndex > wp.nWordIndex;
   }
   inline bool operator<=(const CPVT_WordPlace& wp) const {
@@ -60,8 +59,9 @@ struct CPVT_WordPlace {
   }
 
   inline int32_t LineCmp(const CPVT_WordPlace& wp) const {
-    if (nSecIndex != wp.nSecIndex)
+    if (nSecIndex != wp.nSecIndex) {
       return nSecIndex - wp.nSecIndex;
+    }
     return nLineIndex - wp.nLineIndex;
   }
 

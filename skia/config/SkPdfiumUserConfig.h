@@ -133,7 +133,7 @@
 
 #define GR_MAX_OFFSCREEN_AA_DIM 512
 
-// Handle exporting using core/fxcrt/component_export.h
+// Handle exporting using base/component_export.h
 #define SK_API COMPONENT_EXPORT(SKIA)
 
 // Log the file and line number for assertions.

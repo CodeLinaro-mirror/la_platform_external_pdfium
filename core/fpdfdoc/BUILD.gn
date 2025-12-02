@@ -104,6 +104,7 @@ pdfium_unittest_source_set("unittests") {
     "cpdf_dest_unittest.cpp",
     "cpdf_filespec_unittest.cpp",
     "cpdf_formfield_unittest.cpp",
+    "cpdf_interactiveform_unittest.cpp",
     "cpdf_metadata_unittest.cpp",
     "cpdf_nametree_unittest.cpp",
     "cpdf_pagelabel_unittest.cpp",
@@ -119,4 +120,8 @@ pdfium_unittest_source_set("unittests") {
     "../fpdfapi/render",
   ]
   pdfium_root_dir = "../../"
+
+  # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
+  # enable the diagnostic by removing this line.
+  configs = [ "//build/config/compiler:no_exit_time_destructors" ]
 }
