@@ -21,6 +21,14 @@ It is expected that there are still some places lurking in the code which will
 not function properly on big-endian architectures. Bugs and/or patches are
 welcome, however providing this support is **not** a priority at this time.
 
+### Compilers supported
+
+PDFium aims to be compliant with the [Chromium policy](https://chromium.googlesource.com/chromium/src/+/main/docs/toolchain_support.md#existing-toolchain-support).
+
+Currently this means Clang. Former MSVC users should consider using clang-cl
+if needed. Community-contributed patches for gcc will be allowed. No MSVC
+patches will be taken.
+
 #### Google employees
 
 Run: `download_from_google_storage --config` and follow the
@@ -224,10 +232,9 @@ Note, the Reviews and Bugs lists are typically read-only.
 
 ## Bugs
 
-PDFium uses this [bug tracker](https://bugs.chromium.org/p/pdfium/issues/list),
-but for security bugs, please use
-[Chromium's security bug template](https://bugs.chromium.org/p/chromium/issues/entry?template=Security%20Bug)
-and add the "Cr-Internals-Plugins-PDF" label.
+PDFium uses this [bug tracker](https://crbug.com/pdfium/new), but for security
+bugs, please use
+[Chromium's security bug template](https://crbug.com/new?component=1586257&noWizard=True&template=1922342).
 
 ## Contributing code
 

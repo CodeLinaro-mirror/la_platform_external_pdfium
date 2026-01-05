@@ -12,7 +12,6 @@
 #include "core/fxcrt/bytestring.h"
 #include "core/fxge/cfx_color.h"
 
-
 class CPDF_Dictionary;
 class CPDF_SimpleParser;
 
@@ -22,6 +21,7 @@ class CPDF_DefaultAppearance {
     ByteString name;
     float size = 0;  // Defaults to 0 if not found.
   };
+
   explicit CPDF_DefaultAppearance(const ByteString& csDA);
   CPDF_DefaultAppearance(const CPDF_Dictionary* annot_dict,
                          const CPDF_Dictionary* acroform_dict);
@@ -40,7 +40,7 @@ class CPDF_DefaultAppearance {
                                               int nParams);
 
  private:
-  const ByteString m_csDA;
+  const ByteString da_;
 };
 
 #endif  // CORE_FPDFDOC_CPDF_DEFAULTAPPEARANCE_H_
