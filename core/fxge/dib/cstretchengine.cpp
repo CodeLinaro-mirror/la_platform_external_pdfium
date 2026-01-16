@@ -4,11 +4,17 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 #include "core/fxge/dib/cstretchengine.h"
 
 #include <math.h>
 
 #include <algorithm>
+#include <stdio.h>
 #include <type_traits>
 #include <utility>
 
@@ -16,6 +22,7 @@
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/pauseindicator_iface.h"
+#include "core/fxcrt/qc_ui_perf_mode.h"
 #include "core/fxge/calculate_pitch.h"
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
@@ -278,14 +285,265 @@ CStretchEngine::~CStretchEngine() = default;
 
 bool CStretchEngine::Continue(PauseIndicatorIface* pPause) {
   while (state_ == State::kHorizontal) {
-    if (ContinueStretchHorz(pPause)) {
-      return true;
+    UI_PERF_CHECK
+    if (isPerfMode) {
+      StretchHorzRowRange(src_clip_.top, src_clip_.bottom);
+      cur_row_ = src_clip_.bottom;
+      state_ = State::kVertical;
+      StretchVertFast();
+    } else {
+      if (ContinueStretchHorz(pPause)) {
+        return true;
+      }
+      state_ = State::kVertical;
+      StretchVert();
     }
-
-    state_ = State::kVertical;
-    StretchVert();
   }
   return false;
+}
+
+void CStretchEngine::StretchHorzRowRange(int row_begin, int row_end) {
+  switch (trans_method_) {
+    case TransformMethod::k1BppTo8Bpp:
+    case TransformMethod::k1BppToManyBpp:
+      for (int row = row_begin; row < row_end; ++row) {
+        StretchHorzOneRow_1Bpp(row);
+      }
+      return;
+
+    case TransformMethod::k8BppTo8Bpp:
+      for (int row = row_begin; row < row_end; ++row) {
+        StretchHorzOneRow_8BppTo8Bpp(row);
+      }
+      return;
+
+    case TransformMethod::k8BppToManyBpp:
+      if (dest_format_ == FXDIB_Format::kBgr) {
+        for (int row = row_begin; row < row_end; ++row) {
+          StretchHorzOneRow_8BppToBgr(row);
+        }
+      } else {
+        for (int row = row_begin; row < row_end; ++row) {
+          StretchHorzOneRow_8BppToManyBpp(row);
+        }
+      }
+      return;
+
+    case TransformMethod::kManyBpptoManyBpp:
+      for (int row = row_begin; row < row_end; ++row) {
+        StretchHorzOneRow_ManyToMany(row);
+      }
+      return;
+
+    case TransformMethod::kManyBpptoManyBppWithAlpha:
+      for (int row = row_begin; row < row_end; ++row) {
+        StretchHorzOneRow_ManyToManyWithAlpha(row);
+      }
+      return;
+  }
+}
+
+void CStretchEngine::StretchHorzOneRow_1Bpp(int row) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+
+  const uint8_t* src_scan = source_->GetScanline(row).data();
+  uint8_t* dest_scan = inter_buf_.subspan(0).data() +
+                       static_cast<size_t>(row - src_clip_.top) * inter_pitch_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      PixelWeight* pWeights = weight_table_.GetPixelWeight(col);
+      const int src_start = pWeights->src_start_;
+      const int src_end = pWeights->src_end_;
+      const uint32_t* weights = pWeights->weights_;
+
+      uint32_t dest_a = 0;
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        if (src_scan[j / 8] & (1 << (7 - j % 8))) {
+          dest_a += pixel_weight * 255;
+        }
+      }
+
+      *dest_scan++ = PixelFromFixed(dest_a);
+    }
+  });
+}
+
+void CStretchEngine::StretchHorzOneRow_8BppTo8Bpp(int row) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+
+  const uint8_t* src_scan = source_->GetScanline(row).data();
+  uint8_t* dest_scan = inter_buf_.subspan(0).data() +
+                       static_cast<size_t>(row - src_clip_.top) * inter_pitch_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      PixelWeight* pWeights = weight_table_.GetPixelWeight(col);
+      const int src_start = pWeights->src_start_;
+      const int src_end = pWeights->src_end_;
+      const uint32_t* weights = pWeights->weights_;
+
+      uint32_t dest_a = 0;
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        dest_a += pixel_weight * src_scan[j];
+      }
+
+      *dest_scan++ = PixelFromFixed(dest_a);
+    }
+  });
+}
+
+void CStretchEngine::StretchHorzOneRow_8BppToBgr(int row) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  auto src_palette = src_palette_;
+
+  const uint8_t* src_scan = source_->GetScanline(row).data();
+  uint8_t* dest_scan = inter_buf_.subspan(0).data() +
+                       static_cast<size_t>(row - src_clip_.top) * inter_pitch_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      PixelWeight* pWeights = weight_table_.GetPixelWeight(col);
+      const int src_start = pWeights->src_start_;
+      const int src_end = pWeights->src_end_;
+      const uint32_t* weights = pWeights->weights_;
+
+      uint32_t dest_r = 0;
+      uint32_t dest_g = 0;
+      uint32_t dest_b = 0;
+
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        const FX_ARGB argb = src_palette[src_scan[j]];
+        dest_r += pixel_weight * static_cast<uint8_t>(argb >> 16);
+        dest_g += pixel_weight * static_cast<uint8_t>(argb >> 8);
+        dest_b += pixel_weight * static_cast<uint8_t>(argb);
+      }
+
+      *dest_scan++ = PixelFromFixed(dest_b);
+      *dest_scan++ = PixelFromFixed(dest_g);
+      *dest_scan++ = PixelFromFixed(dest_r);
+    }
+  });
+}
+
+void CStretchEngine::StretchHorzOneRow_8BppToManyBpp(int row) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  auto src_palette = src_palette_;
+
+  const uint8_t* src_scan = source_->GetScanline(row).data();
+  uint8_t* dest_scan = inter_buf_.subspan(0).data() +
+                       static_cast<size_t>(row - src_clip_.top) * inter_pitch_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      PixelWeight* pWeights = weight_table_.GetPixelWeight(col);
+      const int src_start = pWeights->src_start_;
+      const int src_end = pWeights->src_end_;
+      const uint32_t* weights = pWeights->weights_;
+
+      uint32_t dest_r = 0;
+      uint32_t dest_g = 0;
+      uint32_t dest_b = 0;
+
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        const FX_ARGB argb = src_palette[src_scan[j]];
+        dest_b += pixel_weight * static_cast<uint8_t>(argb >> 24);
+        dest_g += pixel_weight * static_cast<uint8_t>(argb >> 16);
+        dest_r += pixel_weight * static_cast<uint8_t>(argb >> 8);
+      }
+
+      *dest_scan++ = PixelFromFixed(dest_b);
+      *dest_scan++ = PixelFromFixed(dest_g);
+      *dest_scan++ = PixelFromFixed(dest_r);
+    }
+  });
+}
+
+void CStretchEngine::StretchHorzOneRow_ManyToManyWithAlpha(int row) {
+  DCHECK(has_alpha_);
+
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  const int bpp = dest_bpp_ / 8;
+
+  const uint8_t* src_scan = source_->GetScanline(row).data();
+  uint8_t* dest_scan = inter_buf_.subspan(0).data() +
+                       static_cast<size_t>(row - src_clip_.top) * inter_pitch_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      PixelWeight* pWeights = weight_table_.GetPixelWeight(col);
+      const int src_start = pWeights->src_start_;
+      const int src_end = pWeights->src_end_;
+      const uint32_t* weights = pWeights->weights_;
+
+      uint32_t dest_a = 0;
+      uint32_t dest_r = 0;
+      uint32_t dest_g = 0;
+      uint32_t dest_b = 0;
+
+      const uint8_t* src_pixel = src_scan + src_start * bpp;
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t weighted_alpha = weights[offset] * src_pixel[3] / 255;
+        dest_b += weighted_alpha * src_pixel[0];
+        dest_g += weighted_alpha * src_pixel[1];
+        dest_r += weighted_alpha * src_pixel[2];
+        dest_a += weighted_alpha;
+        src_pixel += bpp;
+      }
+
+      *dest_scan++ = PixelFromFixed(dest_b);
+      *dest_scan++ = PixelFromFixed(dest_g);
+      *dest_scan++ = PixelFromFixed(dest_r);
+      *dest_scan = PixelFromFixed(255 * dest_a);
+      dest_scan += bpp - 3;
+    }
+  });
+}
+
+void CStretchEngine::StretchHorzOneRow_ManyToMany(int row) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  const int bpp = dest_bpp_ / 8;
+
+  const uint8_t* src_scan = source_->GetScanline(row).data();
+  uint8_t* dest_scan = inter_buf_.subspan(0).data() +
+                       static_cast<size_t>(row - src_clip_.top) * inter_pitch_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      PixelWeight* pWeights = weight_table_.GetPixelWeight(col);
+      const int src_start = pWeights->src_start_;
+      const int src_end = pWeights->src_end_;
+      const uint32_t* weights = pWeights->weights_;
+
+      uint32_t dest_r = 0;
+      uint32_t dest_g = 0;
+      uint32_t dest_b = 0;
+
+      const uint8_t* src_pixel = src_scan + src_start * bpp;
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        dest_b += pixel_weight * src_pixel[0];
+        dest_g += pixel_weight * src_pixel[1];
+        dest_r += pixel_weight * src_pixel[2];
+        src_pixel += bpp;
+      }
+
+      *dest_scan++ = PixelFromFixed(dest_b);
+      *dest_scan++ = PixelFromFixed(dest_g);
+      *dest_scan++ = PixelFromFixed(dest_r);
+      dest_scan += bpp - 3;
+    }
+  });
 }
 
 bool CStretchEngine::StartStretchHorz() {
@@ -442,6 +700,164 @@ bool CStretchEngine::ContinueStretchHorz(PauseIndicatorIface* pPause) {
     rows_to_go--;
   }
   return false;
+}
+
+void CStretchEngine::StretchVertFast() {
+  if (dest_height_ == 0) {
+    return;
+  }
+
+  WeightTable table;
+  if (!table.CalculateWeights(dest_height_, dest_clip_.top, dest_clip_.bottom,
+                              src_height_, src_clip_.top, src_clip_.bottom,
+                              resample_options_)) {
+    return;
+  }
+
+  switch (trans_method_) {
+    case TransformMethod::k1BppTo8Bpp:
+    case TransformMethod::k1BppToManyBpp:
+    case TransformMethod::k8BppTo8Bpp: {
+      for (int row = dest_clip_.top; row < dest_clip_.bottom; ++row) {
+        StretchVertRow_Gray(table.GetPixelWeight(row));
+        dest_bitmap_->ComposeScanline(row - dest_clip_.top, dest_scanline_);
+      }
+      break;
+    }
+
+    case TransformMethod::k8BppToManyBpp:
+    case TransformMethod::kManyBpptoManyBpp: {
+      for (int row = dest_clip_.top; row < dest_clip_.bottom; ++row) {
+        StretchVertRow_ManyToMany(table.GetPixelWeight(row));
+        dest_bitmap_->ComposeScanline(row - dest_clip_.top, dest_scanline_);
+      }
+      break;
+    }
+
+    case TransformMethod::kManyBpptoManyBppWithAlpha: {
+      for (int row = dest_clip_.top; row < dest_clip_.bottom; ++row) {
+        StretchVertRow_ManyToManyWithAlpha(table.GetPixelWeight(row));
+        dest_bitmap_->ComposeScanline(row - dest_clip_.top, dest_scanline_);
+      }
+      break;
+    }
+  }
+}
+
+void CStretchEngine::StretchVertRow_Gray(PixelWeight* pWeights) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  const int dest_bpp = dest_bpp_ / 8;
+
+  uint8_t* dest_scan = dest_scanline_.data();
+  const uint8_t* inter_base = inter_buf_.subspan(0).data();
+  const int src_start = pWeights->src_start_;
+  const int src_end = pWeights->src_end_;
+  const uint32_t* weights = pWeights->weights_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      const uint8_t* src_pixel =
+          inter_base + (col - dest_left) * dest_bpp +
+          static_cast<size_t>(src_start - src_clip_.top) * inter_pitch_;
+
+      uint32_t dest_a = 0;
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        dest_a += pixel_weight * src_pixel[0];
+        src_pixel += inter_pitch_;
+      }
+
+      *dest_scan = PixelFromFixed(dest_a);
+      dest_scan += dest_bpp;
+    }
+  });
+}
+
+void CStretchEngine::StretchVertRow_ManyToMany(PixelWeight* pWeights) {
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  const int dest_bpp = dest_bpp_ / 8;
+
+  uint8_t* dest_scan = dest_scanline_.data();
+  const uint8_t* inter_base = inter_buf_.subspan(0).data();
+
+  const int src_start = pWeights->src_start_;
+  const int src_end = pWeights->src_end_;
+  const uint32_t* weights = pWeights->weights_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      const uint8_t* src_pixel =
+          inter_base + (col - dest_left) * dest_bpp +
+          static_cast<size_t>(src_start - src_clip_.top) * inter_pitch_;
+
+      uint32_t dest_r = 0;
+      uint32_t dest_g = 0;
+      uint32_t dest_b = 0;
+
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        dest_b += pixel_weight * src_pixel[0];
+        dest_g += pixel_weight * src_pixel[1];
+        dest_r += pixel_weight * src_pixel[2];
+        src_pixel += inter_pitch_;
+      }
+
+      dest_scan[0] = PixelFromFixed(dest_b);
+      dest_scan[1] = PixelFromFixed(dest_g);
+      dest_scan[2] = PixelFromFixed(dest_r);
+      dest_scan += dest_bpp;
+    }
+  });
+}
+
+void CStretchEngine::StretchVertRow_ManyToManyWithAlpha(PixelWeight* pWeights) {
+  DCHECK(has_alpha_);
+
+  const int dest_left = dest_clip_.left;
+  const int dest_right = dest_clip_.right;
+  const int dest_bpp = dest_bpp_ / 8;
+
+  uint8_t* dest_scan = dest_scanline_.data();
+  const uint8_t* inter_base = inter_buf_.subspan(0).data();
+
+  const int src_start = pWeights->src_start_;
+  const int src_end = pWeights->src_end_;
+  const uint32_t* weights = pWeights->weights_;
+
+  UNSAFE_TODO({
+    for (int col = dest_left; col < dest_right; ++col) {
+      const uint8_t* src_pixel =
+          inter_base + (col - dest_left) * dest_bpp +
+          static_cast<size_t>(src_start - src_clip_.top) * inter_pitch_;
+
+      uint32_t dest_a = 0;
+      uint32_t dest_r = 0;
+      uint32_t dest_g = 0;
+      uint32_t dest_b = 0;
+
+      for (int offset = 0, j = src_start; j <= src_end; ++j, ++offset) {
+        const uint32_t pixel_weight = weights[offset];
+        dest_b += pixel_weight * src_pixel[0];
+        dest_g += pixel_weight * src_pixel[1];
+        dest_r += pixel_weight * src_pixel[2];
+        dest_a += pixel_weight * src_pixel[3];
+        src_pixel += inter_pitch_;
+      }
+
+      if (dest_a) {
+        int r = static_cast<uint32_t>(dest_r) * 255 / dest_a;
+        int g = static_cast<uint32_t>(dest_g) * 255 / dest_a;
+        int b = static_cast<uint32_t>(dest_b) * 255 / dest_a;
+        dest_scan[0] = std::clamp(b, 0, 255);
+        dest_scan[1] = std::clamp(g, 0, 255);
+        dest_scan[2] = std::clamp(r, 0, 255);
+      }
+      dest_scan[3] = PixelFromFixed(dest_a);
+      dest_scan += dest_bpp;
+    }
+  });
 }
 
 void CStretchEngine::StretchVert() {

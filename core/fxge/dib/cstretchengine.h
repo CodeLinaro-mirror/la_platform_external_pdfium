@@ -4,6 +4,11 @@
 
 // Original code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com
 
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 #ifndef CORE_FXGE_DIB_CSTRETCHENGINE_H_
 #define CORE_FXGE_DIB_CSTRETCHENGINE_H_
 
@@ -116,7 +121,18 @@ class CStretchEngine {
   bool Continue(PauseIndicatorIface* pPause);
   bool StartStretchHorz();
   bool ContinueStretchHorz(PauseIndicatorIface* pPause);
+  void StretchHorzOneRow_1Bpp(int row);
+  void StretchHorzOneRow_8BppTo8Bpp(int row);
+  void StretchHorzOneRow_8BppToBgr(int row);
+  void StretchHorzOneRow_8BppToManyBpp(int row);
+  void StretchHorzOneRow_ManyToMany(int row);
+  void StretchHorzOneRow_ManyToManyWithAlpha(int row);
+  void StretchHorzRowRange(int row_begin, int row_end);
   void StretchVert();
+  void StretchVertFast();
+  void StretchVertRow_Gray(PixelWeight* pWeights);
+  void StretchVertRow_ManyToMany( PixelWeight* pWeights);
+  void StretchVertRow_ManyToManyWithAlpha(PixelWeight* pWeights);
 
   const FXDIB_ResampleOptions& GetResampleOptionsForTest() const {
     return resample_options_;
