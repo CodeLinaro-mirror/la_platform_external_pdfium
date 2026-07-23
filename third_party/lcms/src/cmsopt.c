@@ -20,6 +20,10 @@
 // LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+/* Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
 //
 //---------------------------------------------------------------------------------
 //
@@ -1579,9 +1583,9 @@ void MatShaperEval16(CMSREGISTER const cmsUInt16Number In[],
     bi = In[2] & 0xFFU;
 
     // Across first shaper, which also converts to 1.14 fixed point
-    r = _FixedClamp(p->Shaper1R[ri]);
-    g = _FixedClamp(p->Shaper1G[gi]);
-    b = _FixedClamp(p->Shaper1B[bi]);
+    r = p->Shaper1R[ri];
+    g = p->Shaper1G[gi];
+    b = p->Shaper1B[bi];
 
     // Evaluate the matrix in 1.14 fixed point
     l1 = _MatShaperEvaluateRow(p->Mat[0], p->Off[0], r, g, b);
@@ -1613,9 +1617,9 @@ void FillFirstShaper(cmsS1Fixed14Number* Table, cmsToneCurve* Curve)
         y   = cmsEvalToneCurveFloat(Curve, R);
 
         if (y < 131072.0)
-            Table[i] = DOUBLE_TO_1FIXED14(y);
+            Table[i] = _FixedClamp(DOUBLE_TO_1FIXED14(y));
         else
-            Table[i] = 0x7fffffff;
+            Table[i] = _FixedClamp(0x7fffffff);
     }
 }
 
