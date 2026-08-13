@@ -1289,9 +1289,10 @@ void CPDF_ICCBasedCS::TranslateImageLine(pdfium::span<uint8_t> dest_span,
       break;
     case 3:
       for (int i = 0; i < pixels; i++) {
-        int index = g_ContribTable_layer_0[*pSrcBuf++] +
-                    g_ContribTable_layer_1[*pSrcBuf++] +
-                    g_ContribTable_layer_2[*pSrcBuf++];
+        int index = g_ContribTable_layer_2[pSrcBuf[0]] +
+                    g_ContribTable_layer_1[pSrcBuf[1]] +
+                    g_ContribTable_layer_0[pSrcBuf[2]];
+        pSrcBuf += 3;
         index *= 3;
         *pDestBuf++ = cache_[index];
         *pDestBuf++ = cache_[index + 1];
@@ -1300,10 +1301,11 @@ void CPDF_ICCBasedCS::TranslateImageLine(pdfium::span<uint8_t> dest_span,
       break;
     case 4:
       for (int i = 0; i < pixels; i++) {
-        int index = g_ContribTable_layer_0[*pSrcBuf++] +
-                    g_ContribTable_layer_1[*pSrcBuf++] +
-                    g_ContribTable_layer_2[*pSrcBuf++] +
-                    g_ContribTable_layer_3[*pSrcBuf++];
+        int index = g_ContribTable_layer_3[pSrcBuf[0]] +
+                    g_ContribTable_layer_2[pSrcBuf[1]] +
+                    g_ContribTable_layer_1[pSrcBuf[2]] +
+                    g_ContribTable_layer_0[pSrcBuf[3]];
+        pSrcBuf += 4;
         index *= 3;
         *pDestBuf++ = cache_[index];
         *pDestBuf++ = cache_[index + 1];
@@ -1312,8 +1314,9 @@ void CPDF_ICCBasedCS::TranslateImageLine(pdfium::span<uint8_t> dest_span,
       break;
     case 2:
       for (int i = 0; i < pixels; i++) {
-        int index = g_ContribTable_layer_0[*pSrcBuf++] +
-                    g_ContribTable_layer_1[*pSrcBuf++];
+        int index = g_ContribTable_layer_1[pSrcBuf[0]] +
+                    g_ContribTable_layer_0[pSrcBuf[1]];
+        pSrcBuf += 2;
         index *= 3;
         *pDestBuf++ = cache_[index];
         *pDestBuf++ = cache_[index + 1];
